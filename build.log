@@ -1,0 +1,315 @@
+make -C ./src/backend generated-headers
+make[1]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend'
+make -C ../include/catalog generated-headers
+make -C nodes generated-header-symlinks
+make -C utils generated-header-symlinks
+make[2]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/nodes'
+make[2]: Nothing to be done for 'generated-header-symlinks'.
+make[2]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/nodes'
+make[2]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/utils'
+make -C adt jsonpath_gram.h
+make[2]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/include/catalog'
+make[2]: Nothing to be done for 'generated-headers'.
+make[2]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/include/catalog'
+make[3]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/utils/adt'
+make[3]: 'jsonpath_gram.h' is up to date.
+make[3]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/utils/adt'
+make[2]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/utils'
+make[1]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend'
+make -C src all
+make -C config all
+make[1]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/config'
+make[1]: Nothing to be done for 'all'.
+make[1]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/config'
+make[1]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src'
+make -C common all
+make[2]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/common'
+make[2]: Nothing to be done for 'all'.
+make[2]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/common'
+make -C port all
+make[2]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/port'
+make[2]: Nothing to be done for 'all'.
+make[2]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/port'
+make -C timezone all
+make[2]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/timezone'
+make -C ../../src/port all
+make[3]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/port'
+make[3]: Nothing to be done for 'all'.
+make[3]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/port'
+make -C ../../src/common all
+make[3]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/common'
+make[3]: Nothing to be done for 'all'.
+make[3]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/common'
+make[2]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/timezone'
+make -C backend all
+make[2]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend'
+make -C ../../src/port all
+make -C ../include/catalog generated-headers
+make -C utils generated-header-symlinks
+make -C access all
+make -C archive all
+make -C backup all
+make -C bootstrap all
+make -C catalog all
+make -C parser all
+make -C commands all
+make -C executor all
+make -C foreign all
+make -C lib all
+make -C libpq all
+make -C main all
+make[3]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/archive'
+make[3]: Nothing to be done for 'all'.
+make[3]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/archive'
+make[3]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/port'
+make[3]: Nothing to be done for 'all'.
+make[3]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/port'
+make -C ../../src/common all
+make[3]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/access'
+make -C blockchain all
+make -C nodes all
+make -C brin all
+make[3]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/bootstrap'
+make[3]: Nothing to be done for 'all'.
+make[3]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/bootstrap'
+make[3]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/backup'
+make[3]: Nothing to be done for 'all'.
+make[3]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/backup'
+make[4]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/access/blockchain'
+make[4]: pg_config: No such file or directory
+make[3]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/utils'
+make -C adt jsonpath_gram.h
+make[4]: *** No rule to make target 'all'.  Stop.
+make[4]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/access/blockchain'
+make -C optimizer all
+make -C common all
+make[3]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/foreign'
+make[3]: Nothing to be done for 'all'.
+make[3]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/foreign'
+make[3]: *** [../../../src/backend/common.mk:37: blockchain-recursive] Error 2
+make[3]: *** Waiting for unfinished jobs....
+make -C partitioning all
+make[3]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/parser'
+make[3]: Nothing to be done for 'all'.
+make[3]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/parser'
+make[3]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/catalog'
+make[3]: Nothing to be done for 'all'.
+make[3]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/catalog'
+make[3]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/lib'
+make[3]: Nothing to be done for 'all'.
+make[3]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/lib'
+make[3]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/main'
+make[3]: Nothing to be done for 'all'.
+make[3]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/main'
+make[3]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/libpq'
+make[3]: Nothing to be done for 'all'.
+make[3]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/libpq'
+make -C port all
+make -C postmaster all
+make -C regex all
+make[3]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/commands'
+make[3]: Nothing to be done for 'all'.
+make[3]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/commands'
+make -C replication all
+make -C rewrite all
+make -C statistics all
+make[4]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/access/brin'
+make[4]: Nothing to be done for 'all'.
+make[4]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/access/brin'
+make[3]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/executor'
+make[3]: Nothing to be done for 'all'.
+make[3]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/executor'
+make[3]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/include/catalog'
+make[3]: Nothing to be done for 'generated-headers'.
+make[3]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/include/catalog'
+make[4]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/utils/adt'
+make[4]: 'jsonpath_gram.h' is up to date.
+make[4]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/utils/adt'
+make -C storage all
+make[3]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/utils'
+make -C tcop all
+make[3]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/optimizer'
+make -C geqo all
+make -C tsearch all
+make -C utils all
+make[3]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/nodes'
+make[3]: Nothing to be done for 'all'.
+make[3]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/nodes'
+make -C ../../src/timezone all
+make -C path all
+make[4]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/access/common'
+make[4]: Nothing to be done for 'all'.
+make[4]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/access/common'
+make[3]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/partitioning'
+make[3]: Nothing to be done for 'all'.
+make[3]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/partitioning'
+make[3]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/access'
+make -C jit all
+make[3]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/port'
+make[3]: Nothing to be done for 'all'.
+make[3]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/port'
+make[3]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/common'
+make[3]: Nothing to be done for 'all'.
+make[3]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/common'
+make[3]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/regex'
+make[2]: *** [common.mk:37: access-recursive] Error 2
+make[3]: Nothing to be done for 'all'.
+make[3]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/regex'
+make[3]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/replication'
+make[2]: *** Waiting for unfinished jobs....
+make -C logical all
+make[3]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/postmaster'
+make[3]: Nothing to be done for 'all'.
+make[3]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/postmaster'
+make -C plan all
+make[3]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/rewrite'
+make[3]: Nothing to be done for 'all'.
+make[3]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/rewrite'
+make -C prep all
+make -C util all
+make[3]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/statistics'
+make[3]: Nothing to be done for 'all'.
+make[3]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/statistics'
+make[3]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/storage'
+make -C aio all
+make[3]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/tsearch'
+make[3]: Nothing to be done for 'all'.
+make[3]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/tsearch'
+make[3]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/tcop'
+make[3]: Nothing to be done for 'all'.
+make[3]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/tcop'
+make -C buffer all
+make -C file all
+make -C freespace all
+make -C ipc all
+make[4]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/optimizer/geqo'
+make[4]: Nothing to be done for 'all'.
+make[4]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/optimizer/geqo'
+make[3]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/timezone'
+make -C ../../src/port all
+make -C large_object all
+make -C lmgr all
+make[3]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/jit'
+make[3]: Nothing to be done for 'all'.
+make[3]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/jit'
+make -C page all
+make -C smgr all
+make[4]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/optimizer/plan'
+make[4]: Nothing to be done for 'all'.
+make[4]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/optimizer/plan'
+make[3]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/utils'
+make -C activity all
+make[4]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/optimizer/path'
+make[4]: Nothing to be done for 'all'.
+make[4]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/optimizer/path'
+make[4]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/optimizer/prep'
+make[4]: Nothing to be done for 'all'.
+make[4]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/optimizer/prep'
+make -C sync all
+make[4]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/replication/logical'
+make[4]: Nothing to be done for 'all'.
+make[4]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/replication/logical'
+make[3]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/replication'
+make[4]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/optimizer/util'
+make[4]: Nothing to be done for 'all'.
+make[4]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/optimizer/util'
+make -C adt all
+make -C cache all
+make[4]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/storage/aio'
+make[4]: Nothing to be done for 'all'.
+make[4]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/storage/aio'
+make[4]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/storage/buffer'
+make[4]: Nothing to be done for 'all'.
+make[4]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/storage/buffer'
+make -C error all
+make[4]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/storage/file'
+make[4]: Nothing to be done for 'all'.
+make[4]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/storage/file'
+make[4]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/storage/freespace'
+make[4]: Nothing to be done for 'all'.
+make[4]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/storage/freespace'
+make[3]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/optimizer'
+make[4]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/storage/large_object'
+make[4]: Nothing to be done for 'all'.
+make[4]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/storage/large_object'
+make -C fmgr all
+make[4]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/storage/page'
+make[4]: Nothing to be done for 'all'.
+make[4]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/storage/ipc'
+make[4]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/storage/page'
+make[4]: Nothing to be done for 'all'.
+make[4]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/storage/ipc'
+make[4]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/storage/lmgr'
+make[4]: Nothing to be done for 'all'.
+make -C hash all
+make[4]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/storage/lmgr'
+make -C init all
+make -C mb all
+make -C misc all
+make[4]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/storage/smgr'
+make[4]: Nothing to be done for 'all'.
+make[4]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/storage/smgr'
+make -C mmgr all
+make -C resowner all
+make -C sort all
+make[4]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/port'
+make[4]: Nothing to be done for 'all'.
+make[4]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/port'
+make -C time all
+make -C ../../src/common all
+make[4]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/storage/sync'
+make[4]: Nothing to be done for 'all'.
+make[4]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/storage/sync'
+make[3]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/storage'
+make[4]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/utils/activity'
+make[4]: Nothing to be done for 'all'.
+make[4]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/utils/activity'
+make[4]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/utils/error'
+make[4]: Nothing to be done for 'all'.
+make[4]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/utils/error'
+make[4]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/utils/fmgr'
+make[4]: Nothing to be done for 'all'.
+make[4]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/utils/fmgr'
+make[4]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/utils/cache'
+make[4]: Nothing to be done for 'all'.
+make[4]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/utils/cache'
+make -C adt jsonpath_gram.h
+make[4]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/utils/hash'
+make[4]: Nothing to be done for 'all'.
+make[4]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/utils/hash'
+make[4]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/utils/init'
+make[4]: Nothing to be done for 'all'.
+make[4]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/utils/init'
+make[4]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/utils/mmgr'
+make[4]: Nothing to be done for 'all'.
+make[4]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/utils/mmgr'
+make[4]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/utils/mb'
+make[4]: Nothing to be done for 'all'.
+make[4]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/utils/mb'
+make[4]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/utils/misc'
+make[4]: Nothing to be done for 'all'.
+make[4]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/utils/misc'
+make[4]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/utils/resowner'
+make[4]: Nothing to be done for 'all'.
+make[4]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/utils/resowner'
+make[4]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/utils/sort'
+make[4]: Nothing to be done for 'all'.
+make[4]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/utils/sort'
+make[4]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/utils/time'
+make[4]: Nothing to be done for 'all'.
+make[4]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/utils/time'
+make[4]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/utils/adt'
+make[4]: Nothing to be done for 'all'.
+make[4]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/utils/adt'
+make[4]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/utils/adt'
+make[4]: 'jsonpath_gram.h' is up to date.
+make[4]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/utils/adt'
+make[3]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend/utils'
+make[4]: Entering directory '/home/eagle/Code/BC_Postgres/postgres_test/src/common'
+make[4]: Nothing to be done for 'all'.
+make[4]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/common'
+make[3]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/timezone'
+make[2]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src/backend'
+make[1]: *** [Makefile:42: all-backend-recurse] Error 2
+make[1]: Leaving directory '/home/eagle/Code/BC_Postgres/postgres_test/src'
+make: *** [GNUmakefile:11: all-src-recurse] Error 2

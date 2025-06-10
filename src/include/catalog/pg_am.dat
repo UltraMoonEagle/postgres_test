@@ -15,6 +15,9 @@
 { oid => '2', oid_symbol => 'HEAP_TABLE_AM_OID',
   descr => 'heap table access method',
   amname => 'heap', amhandler => 'heap_tableam_handler', amtype => 't' },
+{ oid => '12336', oid_symbol => 'BLOCKCHAIN_TABLE_AM_OID',
+  descr => 'blockchain table access method',
+  amname => 'blockchain', amhandler => 'blockchain_tableam_handler', amtype => 't'},
 { oid => '403', oid_symbol => 'BTREE_AM_OID',
   descr => 'b-tree index access method',
   amname => 'btree', amhandler => 'bthandler', amtype => 'i' },
@@ -32,6 +35,5 @@
   amname => 'spgist', amhandler => 'spghandler', amtype => 'i' },
 { oid => '3580', oid_symbol => 'BRIN_AM_OID',
   descr => 'block range index (BRIN) access method',
-  amname => 'brin', amhandler => 'brinhandler', amtype => 'i' },
-
+  amname => 'brin', amhandler => 'brinhandler', amtype => 'i' }
 ]

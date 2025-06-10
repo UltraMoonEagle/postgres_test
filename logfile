@@ -183,3 +183,47 @@
 2025-06-04 17:10:30.383 IST [279415] STATEMENT:  SHOW (version
 	);
 2025-06-04 17:57:56.077 IST [283108] FATAL:  database "eagle" does not exist
+2025-06-10 12:43:54.263 IST [435666] LOG:  starting PostgreSQL 18beta1 on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 13.3.0-6ubuntu2~24.04) 13.3.0, 64-bit
+2025-06-10 12:43:54.263 IST [435666] LOG:  listening on IPv4 address "127.0.0.1", port 5432
+2025-06-10 12:43:54.265 IST [435666] LOG:  listening on Unix socket "/tmp/.s.PGSQL.5432"
+2025-06-10 12:43:54.267 IST [435672] LOG:  database system was shut down at 2025-06-10 12:43:27 IST
+2025-06-10 12:43:54.270 IST [435666] LOG:  database system is ready to accept connections
+2025-06-10 12:44:17.008 IST [440347] FATAL:  database "test" does not exist
+2025-06-10 12:46:48.593 IST [443877] ERROR:  syntax error at or near ")" at character 27
+2025-06-10 12:46:48.593 IST [443877] STATEMENT:  INSERT INTO test VALUES (!)
+	;
+2025-06-10 12:47:05.877 IST [443877] ERROR:  trying to store an on-disk heap tuple into wrong type of slot
+2025-06-10 12:47:05.877 IST [443877] STATEMENT:  SELECT * FROM test;
+2025-06-10 12:48:54.270 IST [435670] LOG:  checkpoint starting: time
+2025-06-10 12:49:01.218 IST [435670] LOG:  checkpoint complete: wrote 69 buffers (0.4%), wrote 3 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=6.928 s, sync=0.009 s, total=6.949 s; sync files=33, longest=0.007 s, average=0.001 s; distance=451 kB, estimate=451 kB; lsn=0/17D1B40, redo lsn=0/17D1AB0
+2025-06-10 14:17:28.569 IST [443877] ERROR:  cannot update blockchain table "a"
+2025-06-10 14:17:28.569 IST [443877] STATEMENT:  UPDATE a SET id = 5 WHERE id = 3;
+2025-06-10 14:17:42.628 IST [443877] ERROR:  cannot delete from blockchain table "a"
+2025-06-10 14:17:42.628 IST [443877] STATEMENT:  DELETE FROM a WHERE id = 3;
+2025-06-10 14:18:08.987 IST [443877] ERROR:  trying to store an on-disk heap tuple into wrong type of slot
+2025-06-10 14:18:08.987 IST [443877] STATEMENT:  SELECT * FROM test;
+2025-06-10 14:20:16.075 IST [435670] LOG:  checkpoint starting: time
+2025-06-10 14:20:16.190 IST [435670] LOG:  checkpoint complete: wrote 1 buffers (0.0%), wrote 1 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.102 s, sync=0.003 s, total=0.115 s; sync files=2, longest=0.002 s, average=0.002 s; distance=0 kB, estimate=406 kB; lsn=0/17D1E58, redo lsn=0/17D1E00
+2025-06-10 14:21:28.886 IST [443877] ERROR:  trying to store an on-disk heap tuple into wrong type of slot
+2025-06-10 14:21:28.886 IST [443877] STATEMENT:  SELECT * FROM a;
+2025-06-10 14:25:16.290 IST [435670] LOG:  checkpoint starting: time
+2025-06-10 14:25:16.406 IST [435670] LOG:  checkpoint complete: wrote 1 buffers (0.0%), wrote 0 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.101 s, sync=0.003 s, total=0.117 s; sync files=1, longest=0.003 s, average=0.003 s; distance=0 kB, estimate=366 kB; lsn=0/17D2090, redo lsn=0/17D2038
+2025-06-10 14:28:49.770 IST [435666] LOG:  received fast shutdown request
+2025-06-10 14:28:49.777 IST [435666] LOG:  aborting any active transactions
+2025-06-10 14:28:49.778 IST [443877] FATAL:  terminating connection due to administrator command
+2025-06-10 14:28:49.779 IST [435666] LOG:  background worker "logical replication launcher" (PID 435675) exited with exit code 1
+2025-06-10 14:28:49.780 IST [435670] LOG:  shutting down
+2025-06-10 14:28:49.781 IST [435670] LOG:  checkpoint starting: shutdown immediate
+2025-06-10 14:28:49.785 IST [435670] LOG:  checkpoint complete: wrote 0 buffers (0.0%), wrote 0 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.001 s, sync=0.001 s, total=0.005 s; sync files=0, longest=0.000 s, average=0.000 s; distance=0 kB, estimate=329 kB; lsn=0/17D2140, redo lsn=0/17D2140
+2025-06-10 14:28:49.792 IST [435666] LOG:  database system is shut down
+2025-06-10 15:08:44.499 IST [751673] LOG:  starting PostgreSQL 18beta1 on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 13.3.0-6ubuntu2~24.04) 13.3.0, 64-bit
+2025-06-10 15:08:44.499 IST [751673] LOG:  listening on IPv4 address "127.0.0.1", port 5432
+2025-06-10 15:08:44.500 IST [751673] LOG:  listening on Unix socket "/tmp/.s.PGSQL.5432"
+2025-06-10 15:08:44.503 IST [751679] LOG:  database system was shut down at 2025-06-10 15:08:24 IST
+2025-06-10 15:08:44.504 IST [751673] LOG:  database system is ready to accept connections
+2025-06-10 15:09:47.255 IST [751697] ERROR:  trying to store an on-disk heap tuple into wrong type of slot
+2025-06-10 15:09:47.255 IST [751697] STATEMENT:  UPDATE a SET id = 9 WHERE id = 6;
+2025-06-10 15:09:58.270 IST [751697] ERROR:  trying to store an on-disk heap tuple into wrong type of slot
+2025-06-10 15:09:58.270 IST [751697] STATEMENT:  DELETE FROM a WHERE id = 6;
+2025-06-10 15:10:17.347 IST [751697] ERROR:  trying to store an on-disk heap tuple into wrong type of slot
+2025-06-10 15:10:17.347 IST [751697] STATEMENT:  SELECT * FROM a;

@@ -912,6 +912,9 @@
   proname => 'heap_tableam_handler', provolatile => 'v',
   prorettype => 'table_am_handler', proargtypes => 'internal',
   prosrc => 'heap_tableam_handler' },
+{ oid => '12337', descr => 'handler for blockchain table access method',
+  proname => 'blockchain_tableam_handler', prolang => 'internal', provolatile => 'i',
+  prorettype => 'internal', proargtypes => '', prosrc => 'blockchain_tableam_handler' },
 
 # Index access method handlers
 { oid => '330', descr => 'btree index access method handler',
