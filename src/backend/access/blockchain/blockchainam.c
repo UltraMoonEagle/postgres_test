@@ -45,6 +45,23 @@
 #include "storage/smgr.h"
 #include "utils/builtins.h"
 #include "utils/rel.h"
+#include "utils/lsyscache.h"
+#include "utils/varlena.h"
+#include "catalog/pg_attribute.h"
+#include "catalog/heap.h"
+
+#include "access/htup_details.h"
+#include "executor/tuptable.h"
+#include "funcapi.h"
+#include "utils/datum.h"
+#include "utils/timestamp.h"
+#include "utils/uuid.h"
+#include "utils/pg_lsn.h"
+
+#include "access/htup.h"
+#include "common/sha2.h"
+#include "access/hash.h"
+
 
 PG_MODULE_MAGIC;
 PG_FUNCTION_INFO_V1(blockchain_tableam_handler);
@@ -89,6 +106,9 @@ static bool BitmapHeapScanNextBlock(TableScanDesc scan,
 									bool *recheck,
 									uint64 *lossy_pages, uint64 *exact_pages);
 
+// static bytea * get_previous_hash(Relation relation);
+
+// static bytea * compute_curr_hash(Relation relation, TupleTableSlot *slot);
 
 /* ------------------------------------------------------------------------
  * Slot related callbacks for heap AM
@@ -2713,6 +2733,8 @@ blockchain_tableam_handler(PG_FUNCTION_ARGS)
 static const TupleTableSlotOps *
 blockchainam_slot_callbacks(Relation relation)
 {
+		elog(LOG, "blockchainam_slot_callbacks called for relation %s",
+			 RelationGetRelationName(relation));
 	    return &TTSOpsBufferHeapTuple;
 }
 
@@ -2743,15 +2765,35 @@ blockchainam_tuple_delete(Relation rel, ItemPointer tid,
 	return TM_Ok;
 }
 
-/* Placeholder INSERT — just calls heap insert for now */
+
+/* Insert a tuple into a blockchain table, computing hashes and timestamps */
 static void
 blockchainam_tuple_insert(Relation relation, TupleTableSlot *slot,
                           CommandId cid, int options, BulkInsertState bistate)
 {
-    /* Eventually: compute hash, add prev_hash/curr_hash/timestamp */
-    heapam_tuple_insert(relation, slot, cid, options, bistate);
+	// TimestampTz ts = GetCurrentTimestamp();
+	// bytea *prev_hash = get_previous_hash(relation);
+	// bytea *curr_hash = compute_curr_hash(relation, slot);
 
+	// /* Find attribute numbers and inject the values */
+	// TupleDesc desc = RelationGetDescr(relation);
+	// slot_getallattrs(slot); // Force deconstruction
+	// for (int i = 0; i < desc->natts; i++)
+	// {
+	// 	Form_pg_attribute attr = TupleDescAttr(desc, i);
+	// 	if (strcmp(NameStr(attr->attname), "prev_hash") == 0)
+	// 		slot->tts_values[i] = PointerGetDatum(prev_hash), slot->tts_isnull[i] = false;
+	// 	else if (strcmp(NameStr(attr->attname), "curr_hash") == 0)
+	// 		slot->tts_values[i] = PointerGetDatum(curr_hash), slot->tts_isnull[i] = false;
+	// 	else if (strcmp(NameStr(attr->attname), "ts") == 0)
+	// 		slot->tts_values[i] = TimestampTzGetDatum(ts), slot->tts_isnull[i] = false;
+	// }
+
+	ExecMaterializeSlot(slot);  // Ensure it's fully formed for heap insert
+
+	heapam_tuple_insert(relation, slot, cid, options, bistate);
 }
+
 
 static void
 blockchainam_tuple_complete_speculative(Relation rel, TupleTableSlot *slot,
@@ -2771,4 +2813,97 @@ blockchainam_tuple_insert_speculative(Relation rel, TupleTableSlot *slot,
          errmsg("INSERT ON CONFLICT not supported on blockchain table (from am)")));
 }
 
+// static bytea *
+// compute_curr_hash(Relation relation, TupleTableSlot *slot)
+// {
+//     TupleDesc tupdesc = RelationGetDescr(relation);
+//     StringInfoData buf;
+//     int i;
 
+// 	pg_sha256_ctx ctx;
+//     uint8 hash[PG_SHA256_DIGEST_LENGTH];
+
+//     initStringInfo(&buf);
+
+//     for (i = 0; i < slot->tts_nvalid; i++)
+//     {
+//         if (slot->tts_values[i] == (Datum) 0 || slot->tts_isnull[i])
+//             continue;
+
+//         if (TupleDescAttr(tupdesc, i)->attgenerated)
+//             continue; // skip generated cols
+
+//         Oid typOutput;
+//         bool typIsVarlena;
+
+//         getTypeOutputInfo(TupleDescAttr(tupdesc, i)->atttypid,
+//                           &typOutput, &typIsVarlena);
+//         char *str = OidOutputFunctionCall(typOutput, slot->tts_values[i]);
+//         appendStringInfoString(&buf, str);
+//     }
+
+   
+//     pg_sha256_init(&ctx);
+//     pg_sha256_update(&ctx, (uint8 *) buf.data, buf.len);
+//     pg_sha256_final(&ctx, hash);
+
+//     bytea *result = (bytea *) palloc(VARHDRSZ + PG_SHA256_DIGEST_LENGTH);
+//     SET_VARSIZE(result, VARHDRSZ + PG_SHA256_DIGEST_LENGTH);
+//     memcpy(VARDATA(result), hash, PG_SHA256_DIGEST_LENGTH);
+
+//     return result;
+// }
+
+
+static bytea *
+get_previous_hash(Relation relation)
+{
+    TableScanDesc scan;
+    HeapTuple tuple;
+    TupleDesc tupdesc = RelationGetDescr(relation);
+    int attnum = -1;
+
+    for (int i = 0; i < tupdesc->natts; i++)
+    {
+        if (strcmp(NameStr(TupleDescAttr(tupdesc, i)->attname), "curr_hash") == 0)
+        {
+            attnum = i + 1;
+            break;
+        }
+    }
+
+    if (attnum == -1)
+        elog(ERROR, "curr_hash column not found");
+
+    scan = table_beginscan(relation, GetLatestSnapshot(), 0, NULL);
+    bytea *latest = NULL;
+
+    while ((tuple = heap_getnext(scan, ForwardScanDirection)) != NULL)
+    {
+        Datum val;
+        bool isnull;
+        val = heap_getattr(tuple, attnum, tupdesc, &isnull);
+
+        if (!isnull)
+        {
+            if (latest != NULL)
+                pfree(latest);
+            latest = DatumGetByteaP(val);  // Assumes bytea not toasted
+        }
+    }
+
+    table_endscan(scan);
+
+    if (latest == NULL)
+    {
+        // Genesis hash
+        const char *zero = "GENESIS";
+        int len = strlen(zero);
+        bytea *result = (bytea *) palloc(VARHDRSZ + len);
+        SET_VARSIZE(result, VARHDRSZ + len);
+        memcpy(VARDATA(result), zero, len);
+        return result;
+    }
+
+    return latest;
+}

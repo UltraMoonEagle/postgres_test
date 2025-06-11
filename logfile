@@ -227,3 +227,28 @@
 2025-06-10 15:09:58.270 IST [751697] STATEMENT:  DELETE FROM a WHERE id = 6;
 2025-06-10 15:10:17.347 IST [751697] ERROR:  trying to store an on-disk heap tuple into wrong type of slot
 2025-06-10 15:10:17.347 IST [751697] STATEMENT:  SELECT * FROM a;
+2025-06-10 15:58:25.926 IST [751677] LOG:  checkpoint starting: time
+2025-06-10 16:00:04.653 IST [751677] LOG:  checkpoint complete: wrote 987 buffers (6.0%), wrote 3 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=98.703 s, sync=0.013 s, total=98.727 s; sync files=313, longest=0.002 s, average=0.001 s; distance=4678 kB, estimate=4678 kB; lsn=0/1BF25C8, redo lsn=0/1BF2538
+2025-06-10 16:44:47.460 IST [823906] ERROR:  trying to store an on-disk heap tuple into wrong type of slot
+2025-06-10 16:44:47.460 IST [823906] STATEMENT:  SELECT * FROM a;
+2025-06-10 16:48:27.154 IST [751677] LOG:  checkpoint starting: time
+2025-06-10 16:48:27.271 IST [751677] LOG:  checkpoint complete: wrote 1 buffers (0.0%), wrote 1 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.103 s, sync=0.003 s, total=0.117 s; sync files=2, longest=0.002 s, average=0.002 s; distance=0 kB, estimate=4210 kB; lsn=0/1BF27F0, redo lsn=0/1BF2798
+2025-06-11 14:35:28.998 IST [942878] LOG:  starting PostgreSQL 18beta1 on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 13.3.0-6ubuntu2~24.04) 13.3.0, 64-bit
+2025-06-11 14:35:28.998 IST [942878] LOG:  could not bind IPv4 address "127.0.0.1": Address already in use
+2025-06-11 14:35:28.998 IST [942878] HINT:  Is another postmaster already running on port 5432? If not, wait a few seconds and retry.
+2025-06-11 14:35:28.998 IST [942878] WARNING:  could not create listen socket for "localhost"
+2025-06-11 14:35:28.998 IST [942878] FATAL:  could not create any TCP/IP sockets
+2025-06-11 14:35:29.000 IST [942878] LOG:  database system is shut down
+2025-06-11 14:36:09.510 IST [943119] LOG:  starting PostgreSQL 18beta1 on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 13.3.0-6ubuntu2~24.04) 13.3.0, 64-bit
+2025-06-11 14:36:09.510 IST [943119] LOG:  listening on IPv4 address "127.0.0.1", port 5432
+2025-06-11 14:36:09.512 IST [943119] LOG:  listening on Unix socket "/tmp/.s.PGSQL.5432"
+2025-06-11 14:36:09.514 IST [943125] LOG:  database system was shut down at 2025-06-11 14:35:55 IST
+2025-06-11 14:36:09.516 IST [943119] LOG:  database system is ready to accept connections
+2025-06-11 14:36:12.278 IST [943179] FATAL:  database "eagle" does not exist
+2025-06-11 14:36:40.497 IST [943119] LOG:  received smart shutdown request
+2025-06-11 14:36:40.514 IST [943119] LOG:  background worker "logical replication launcher" (PID 943128) exited with exit code 1
+2025-06-11 14:36:40.901 IST [943119] LOG:  client backend (PID 943309) was terminated by signal 9: Killed
+2025-06-11 14:36:40.901 IST [943119] DETAIL:  Failed process was running: CREATE BLOCKCHAIN TABLE a(id int);
+2025-06-11 14:36:40.901 IST [943119] LOG:  terminating any other active server processes
+2025-06-11 14:36:40.903 IST [943119] LOG:  abnormal database system shutdown
+2025-06-11 14:36:40.906 IST [943119] LOG:  database system is shut down
