@@ -29,6 +29,7 @@
 #include "access/tsmapi.h"
 #include "access/visibilitymap.h"
 #include "access/xact.h"
+#include "blockchain/blockchainam.h"
 #include "catalog/catalog.h"
 #include "catalog/index.h"
 #include "catalog/storage.h"
@@ -2677,6 +2678,7 @@ GetHeapamTableAmRoutine(void)
 {
 	return &heapam_methods;
 }
+
 
 Datum
 heap_tableam_handler(PG_FUNCTION_ARGS)

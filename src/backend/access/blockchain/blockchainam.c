@@ -108,18 +108,18 @@ static bool BitmapHeapScanNextBlock(TableScanDesc scan,
 
 // static bytea * get_previous_hash(Relation relation);
 
-// static bytea * compute_curr_hash(Relation relation, TupleTableSlot *slot);
+// static bytea *compute_curr_hash(Relation relation, TupleTableSlot *slot);
 
 /* ------------------------------------------------------------------------
  * Slot related callbacks for heap AM
  * ------------------------------------------------------------------------
  */
 
-// static const TupleTableSlotOps *
-// heapam_slot_callbacks(Relation relation)
-// {
-// 	return &TTSOpsBufferHeapTuple;
-// }
+static const TupleTableSlotOps *
+heapam_slot_callbacks(Relation relation)
+{
+	return &TTSOpsBufferHeapTuple;
+}
 
 
 /* ------------------------------------------------------------------------
@@ -2854,6 +2854,11 @@ blockchainam_tuple_insert_speculative(Relation rel, TupleTableSlot *slot,
 //     return result;
 // }
 
+const TableAmRoutine *
+GetBlockchainTableAmRoutine(void)
+{
+	return &blockchainam_methods;
+}
 
 static bytea *
 get_previous_hash(Relation relation)

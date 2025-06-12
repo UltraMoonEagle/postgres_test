@@ -280,7 +280,7 @@ pgstattuple_approx_internal(Oid relid, FunctionCallInfo fcinfo)
 						RelationGetRelationName(rel)),
 				 errdetail_relkind_not_supported(rel->rd_rel->relkind)));
 
-	if (rel->rd_rel->relam != HEAP_TABLE_AM_OID)
+	if (rel->rd_rel->relam != HEAP_TABLE_AM_OID || rel->rd_rel->relam != BLOCKCHAIN_TABLE_AM_OID)
 		ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						errmsg("only heap AM is supported")));
 

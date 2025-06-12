@@ -1,4 +1,4 @@
-/*-------------------------------------------------------------------------
+    /*-------------------------------------------------------------------------
  *
  * blockchainam.h
  *	  Header for the blockchain table access method.
@@ -15,6 +15,8 @@
 
 #include "access/tableam.h"
 
-extern const TableAmRoutine *GetBlockchainAmTableAmRoutine(void);
+
+extern const TableAmRoutine *GetBlockchainTableAmRoutine(void);
+extern const TableAmRoutine blockchainam_methods;
 
 #endif							/* BLOCKCHAINAM_H */

@@ -28,7 +28,6 @@
 #include "access/xact.h"
 #include "access/xlog.h"
 #include "access/xloginsert.h"
-#include "blockchain/blockchain.h"
 #include "catalog/catalog.h"
 #include "catalog/heap.h"
 #include "catalog/index.h"
@@ -832,11 +831,21 @@ DefineRelation(CreateStmt *stmt, char relkind, Oid ownerId,
 
 	if(stmt->is_blockchain)
 	{
-		// if(relkind != RELKIND_BLOCKCHAIN_TABLE)
-		// 	elog(ERROR, "unexpected relkind: %d", (int) relkind);
-
 		relkind = RELKIND_BLOCKCHAIN_TABLE;
 		blockchain = true;
+		accessMethodId = get_table_am_oid("blockchain", false);
+
+		if(stmt->accessMethod && strcmp(stmt->accessMethod, "blockchain") != 0)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_TABLE_DEFINITION),
+					 errmsg("access method for blockchain table must be \"blockchain\"")));
+	}
+	else if
+	(stmt->accessMethod && strcmp(stmt->accessMethod, "blockchain") == 0)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_TABLE_DEFINITION),
+				 errmsg("access method for non-blockchain table must not be \"blockchain\"")));
 	}
 
 	if (stmt->partspec != NULL)

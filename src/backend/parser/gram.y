@@ -3746,7 +3746,7 @@ CreateStmt:	CREATE OptTemp TABLE qualified_name '(' OptTableElementList ')'
             n->partspec = $10;
             n->ofTypename = NULL;           /* Not supported for now */
             n->constraints = NIL;           /* No top-level constraints */
-            n->accessMethod = $11;
+            n->accessMethod = $11 ? $11 : pstrdup("blockchain");
             n->options = $12;
             n->oncommit = $13;
             n->tablespacename = $14;

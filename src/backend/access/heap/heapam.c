@@ -40,6 +40,7 @@
 #include "access/valid.h"
 #include "access/visibilitymap.h"
 #include "access/xloginsert.h"
+#include "blockchain/blockchainam.h"
 #include "catalog/pg_database.h"
 #include "catalog/pg_database_d.h"
 #include "commands/vacuum.h"
@@ -1343,7 +1344,7 @@ heap_getnext(TableScanDesc sscan, ScanDirection direction)
 	 * rather than the AM oid, is that this allows to write regression tests
 	 * that create another AM reusing the heap handler.
 	 */
-	if (unlikely(sscan->rs_rd->rd_tableam != GetHeapamTableAmRoutine()))
+	if (unlikely(sscan->rs_rd->rd_tableam != GetHeapamTableAmRoutine() && sscan->rs_rd->rd_tableam != GetBlockchainTableAmRoutine()))
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg_internal("only heap AM is supported")));

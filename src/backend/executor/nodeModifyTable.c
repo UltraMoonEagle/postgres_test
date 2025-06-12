@@ -55,7 +55,6 @@
 #include "access/htup_details.h"
 #include "access/tableam.h"
 #include "access/xact.h"
-#include "blockchain/blockchain.h"
 #include "commands/trigger.h"	
 #include "executor/execPartition.h"
 #include "executor/executor.h"
