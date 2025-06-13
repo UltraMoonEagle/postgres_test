@@ -2498,9 +2498,16 @@ truncate_check_rel(Oid relid, Form_pg_class reltuple)
 					 errmsg("cannot truncate foreign table \"%s\"",
 							relname)));
 	}
+	else if(reltuple->relkind == RELKIND_BLOCKCHAIN_TABLE)
+	{
+		/* Blockchain tables are not supported for truncation */
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot truncate blockchain table \"%s\"",
+						relname)));
+	}
 	else if (reltuple->relkind != RELKIND_RELATION &&
-			 reltuple->relkind != RELKIND_PARTITIONED_TABLE &&
-			 reltuple->relkind != RELKIND_BLOCKCHAIN_TABLE)
+			 reltuple->relkind != RELKIND_PARTITIONED_TABLE)
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 				 errmsg("\"%s\" is not a table", relname)));

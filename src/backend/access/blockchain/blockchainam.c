@@ -63,7 +63,6 @@
 #include "access/hash.h"
 
 
-PG_MODULE_MAGIC;
 PG_FUNCTION_INFO_V1(blockchain_tableam_handler);
 
 
@@ -672,7 +671,7 @@ heapam_relation_set_new_filelocator(Relation rel,
 }
 
 static void
-heapam_relation_nontransactional_truncate(Relation rel)
+heapam_relation_nontransactional_truncate(Relation rel)	
 {
 	RelationTruncate(rel, 0);
 }
@@ -2853,6 +2852,12 @@ blockchainam_tuple_insert_speculative(Relation rel, TupleTableSlot *slot,
 
 //     return result;
 // }
+
+// INSERT INTO blockchain (id, prev_hash, curr_hash, ts) VALUES
+// (1,
+//  E'\\x0000000000000000000000000000000000000000000000000000000000000000',
+//  E'\\x1f16b7f3e3d9e9a4a5b3c3d7e9f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9',
+//  '2023-01-01 00:00:00+00');
 
 const TableAmRoutine *
 GetBlockchainTableAmRoutine(void)
