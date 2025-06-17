@@ -252,3 +252,290 @@
 2025-06-11 14:36:40.901 IST [943119] LOG:  terminating any other active server processes
 2025-06-11 14:36:40.903 IST [943119] LOG:  abnormal database system shutdown
 2025-06-11 14:36:40.906 IST [943119] LOG:  database system is shut down
+2025-06-17 15:38:45.922 IST [208887] LOG:  starting PostgreSQL 18beta1 on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 13.3.0-6ubuntu2~24.04) 13.3.0, 64-bit
+2025-06-17 15:38:45.923 IST [208887] LOG:  listening on IPv4 address "127.0.0.1", port 5432
+2025-06-17 15:38:45.924 IST [208887] LOG:  listening on Unix socket "/tmp/.s.PGSQL.5432"
+2025-06-17 15:38:45.927 IST [208893] LOG:  database system was shut down at 2025-06-17 15:38:32 IST
+2025-06-17 15:38:45.929 IST [208887] LOG:  database system is ready to accept connections
+2025-06-17 15:39:15.661 IST [208910] LOG:  Setting __row_id for column __row_id at attno 1
+2025-06-17 15:39:15.661 IST [208910] STATEMENT:  INSERT INTO a VALUES(6);
+2025-06-17 15:39:15.661 IST [208910] LOG:  Setting __curr_hash for column __curr_hash at attno 2
+2025-06-17 15:39:15.661 IST [208910] STATEMENT:  INSERT INTO a VALUES(6);
+2025-06-17 15:39:15.661 IST [208910] LOG:  Setting __prev_hash for column __prev_hash at attno 3
+2025-06-17 15:39:15.661 IST [208910] STATEMENT:  INSERT INTO a VALUES(6);
+2025-06-17 15:39:15.661 IST [208910] LOG:  Setting __tx_type for column __tx_type at attno 4
+2025-06-17 15:39:15.661 IST [208910] STATEMENT:  INSERT INTO a VALUES(6);
+2025-06-17 15:39:15.661 IST [208910] LOG:  Setting __tx_origin for column __tx_origin at attno 5
+2025-06-17 15:39:15.661 IST [208910] STATEMENT:  INSERT INTO a VALUES(6);
+2025-06-17 15:39:15.661 IST [208910] LOG:  Setting __tx_version for column __tx_version at attno 6
+2025-06-17 15:39:15.661 IST [208910] STATEMENT:  INSERT INTO a VALUES(6);
+2025-06-17 15:39:15.661 IST [208910] LOG:  Setting __is_latest for column __is_latest at attno 7
+2025-06-17 15:39:15.661 IST [208910] STATEMENT:  INSERT INTO a VALUES(6);
+2025-06-17 15:39:15.661 IST [208910] LOG:  Setting __tx_timestamp for column __tx_timestamp at attno 8
+2025-06-17 15:39:15.661 IST [208910] STATEMENT:  INSERT INTO a VALUES(6);
+2025-06-17 15:40:05.866 IST [208910] LOG:  Setting __row_id for column __row_id at attno 1
+2025-06-17 15:40:05.866 IST [208910] STATEMENT:  INSERT INTO a VALUES(1);
+2025-06-17 15:40:05.866 IST [208910] LOG:  Setting __curr_hash for column __curr_hash at attno 2
+2025-06-17 15:40:05.866 IST [208910] STATEMENT:  INSERT INTO a VALUES(1);
+2025-06-17 15:40:05.866 IST [208910] LOG:  Setting __prev_hash for column __prev_hash at attno 3
+2025-06-17 15:40:05.866 IST [208910] STATEMENT:  INSERT INTO a VALUES(1);
+2025-06-17 15:40:05.866 IST [208910] LOG:  Setting __tx_type for column __tx_type at attno 4
+2025-06-17 15:40:05.866 IST [208910] STATEMENT:  INSERT INTO a VALUES(1);
+2025-06-17 15:40:05.866 IST [208910] LOG:  Setting __tx_origin for column __tx_origin at attno 5
+2025-06-17 15:40:05.866 IST [208910] STATEMENT:  INSERT INTO a VALUES(1);
+2025-06-17 15:40:05.866 IST [208910] LOG:  Setting __tx_version for column __tx_version at attno 6
+2025-06-17 15:40:05.866 IST [208910] STATEMENT:  INSERT INTO a VALUES(1);
+2025-06-17 15:40:05.866 IST [208910] LOG:  Setting __is_latest for column __is_latest at attno 7
+2025-06-17 15:40:05.866 IST [208910] STATEMENT:  INSERT INTO a VALUES(1);
+2025-06-17 15:40:05.866 IST [208910] LOG:  Setting __tx_timestamp for column __tx_timestamp at attno 8
+2025-06-17 15:40:05.866 IST [208910] STATEMENT:  INSERT INTO a VALUES(1);
+2025-06-17 15:40:52.373 IST [208910] ERROR:  column "__row_id" is of type uuid but expression is of type integer at character 24
+2025-06-17 15:40:52.373 IST [208910] HINT:  You will need to rewrite or cast the expression.
+2025-06-17 15:40:52.373 IST [208910] STATEMENT:  INSERT INTO a VALUES(1,2);
+2025-06-17 15:41:35.756 IST [208887] LOG:  client backend (PID 208910) was terminated by signal 11: Segmentation fault
+2025-06-17 15:41:35.756 IST [208887] DETAIL:  Failed process was running: INSERT INTO a VALUES(8);
+2025-06-17 15:41:35.756 IST [208887] LOG:  terminating any other active server processes
+2025-06-17 15:41:35.757 IST [209042] FATAL:  the database system is in recovery mode
+2025-06-17 15:41:35.757 IST [208887] LOG:  all server processes terminated; reinitializing
+2025-06-17 15:41:35.775 IST [209046] LOG:  database system was interrupted; last known up at 2025-06-17 15:38:45 IST
+2025-06-17 15:41:35.822 IST [209046] LOG:  database system was not properly shut down; automatic recovery in progress
+2025-06-17 15:41:35.823 IST [209046] LOG:  redo starts at 0/1760BF0
+2025-06-17 15:41:35.836 IST [209046] LOG:  invalid record length at 0/1BF4878: expected at least 24, got 0
+2025-06-17 15:41:35.836 IST [209046] LOG:  redo done at 0/1BF4840 system usage: CPU: user: 0.00 s, system: 0.00 s, elapsed: 0.01 s
+2025-06-17 15:41:35.840 IST [209047] LOG:  checkpoint starting: end-of-recovery immediate wait
+2025-06-17 15:41:35.861 IST [209047] LOG:  checkpoint complete: wrote 989 buffers (6.0%), wrote 3 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.008 s, sync=0.010 s, total=0.023 s; sync files=315, longest=0.002 s, average=0.001 s; distance=4687 kB, estimate=4687 kB; lsn=0/1BF4878, redo lsn=0/1BF4878
+2025-06-17 15:41:35.863 IST [208887] LOG:  database system is ready to accept connections
+2025-06-17 15:42:11.175 IST [208887] LOG:  client backend (PID 209054) was terminated by signal 11: Segmentation fault
+2025-06-17 15:42:11.175 IST [208887] DETAIL:  Failed process was running: INSERT INTO a VALUES(5);
+2025-06-17 15:42:11.175 IST [208887] LOG:  terminating any other active server processes
+2025-06-17 15:42:11.175 IST [209066] FATAL:  the database system is in recovery mode
+2025-06-17 15:42:11.176 IST [208887] LOG:  all server processes terminated; reinitializing
+2025-06-17 15:42:11.205 IST [209070] LOG:  database system was interrupted; last known up at 2025-06-17 15:41:35 IST
+2025-06-17 15:42:11.253 IST [209070] LOG:  database system was not properly shut down; automatic recovery in progress
+2025-06-17 15:42:11.256 IST [209070] LOG:  redo starts at 0/1BF48F0
+2025-06-17 15:42:11.256 IST [209070] LOG:  invalid record length at 0/1BF9338: expected at least 24, got 0
+2025-06-17 15:42:11.256 IST [209070] LOG:  redo done at 0/1BF9300 system usage: CPU: user: 0.00 s, system: 0.00 s, elapsed: 0.00 s
+2025-06-17 15:42:11.259 IST [209071] LOG:  checkpoint starting: end-of-recovery immediate wait
+2025-06-17 15:42:11.265 IST [209071] LOG:  checkpoint complete: wrote 5 buffers (0.0%), wrote 3 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.002 s, sync=0.002 s, total=0.008 s; sync files=7, longest=0.001 s, average=0.001 s; distance=18 kB, estimate=18 kB; lsn=0/1BF9338, redo lsn=0/1BF9338
+2025-06-17 15:42:11.267 IST [208887] LOG:  database system is ready to accept connections
+2025-06-17 15:42:46.615 IST [209116] LOG:  Setting __row_id for column __row_id at attno 1
+2025-06-17 15:42:46.615 IST [209116] STATEMENT:  INSERT INTO a VALUES(5);
+2025-06-17 15:42:46.615 IST [209116] LOG:  Setting __curr_hash for column __curr_hash at attno 2
+2025-06-17 15:42:46.615 IST [209116] STATEMENT:  INSERT INTO a VALUES(5);
+2025-06-17 15:42:46.615 IST [209116] LOG:  Setting __prev_hash for column __prev_hash at attno 3
+2025-06-17 15:42:46.615 IST [209116] STATEMENT:  INSERT INTO a VALUES(5);
+2025-06-17 15:42:46.615 IST [209116] LOG:  Setting __tx_type for column __tx_type at attno 4
+2025-06-17 15:42:46.615 IST [209116] STATEMENT:  INSERT INTO a VALUES(5);
+2025-06-17 15:42:46.615 IST [209116] LOG:  Setting __tx_origin for column __tx_origin at attno 5
+2025-06-17 15:42:46.615 IST [209116] STATEMENT:  INSERT INTO a VALUES(5);
+2025-06-17 15:42:46.615 IST [209116] LOG:  Setting __tx_version for column __tx_version at attno 6
+2025-06-17 15:42:46.615 IST [209116] STATEMENT:  INSERT INTO a VALUES(5);
+2025-06-17 15:42:46.615 IST [209116] LOG:  Setting __is_latest for column __is_latest at attno 7
+2025-06-17 15:42:46.615 IST [209116] STATEMENT:  INSERT INTO a VALUES(5);
+2025-06-17 15:42:46.615 IST [209116] LOG:  Setting __tx_timestamp for column __tx_timestamp at attno 8
+2025-06-17 15:42:46.615 IST [209116] STATEMENT:  INSERT INTO a VALUES(5);
+2025-06-17 15:42:56.876 IST [208887] LOG:  client backend (PID 209116) was terminated by signal 11: Segmentation fault
+2025-06-17 15:42:56.876 IST [208887] DETAIL:  Failed process was running: INSERT INTO a VALUES(9);
+2025-06-17 15:42:56.876 IST [208887] LOG:  terminating any other active server processes
+2025-06-17 15:42:56.878 IST [208887] LOG:  all server processes terminated; reinitializing
+2025-06-17 15:42:56.901 IST [209128] LOG:  database system was interrupted; last known up at 2025-06-17 15:42:11 IST
+2025-06-17 15:42:56.944 IST [209128] LOG:  database system was not properly shut down; automatic recovery in progress
+2025-06-17 15:42:56.946 IST [209128] LOG:  redo starts at 0/1BF93B0
+2025-06-17 15:42:56.947 IST [209128] LOG:  invalid record length at 0/1C1E520: expected at least 24, got 0
+2025-06-17 15:42:56.947 IST [209128] LOG:  redo done at 0/1C1E4E8 system usage: CPU: user: 0.00 s, system: 0.00 s, elapsed: 0.00 s
+2025-06-17 15:42:56.965 IST [209129] LOG:  checkpoint starting: end-of-recovery immediate wait
+2025-06-17 15:42:56.972 IST [209129] LOG:  checkpoint complete: wrote 28 buffers (0.2%), wrote 3 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.002 s, sync=0.002 s, total=0.008 s; sync files=23, longest=0.001 s, average=0.001 s; distance=148 kB, estimate=148 kB; lsn=0/1C1E520, redo lsn=0/1C1E520
+2025-06-17 15:42:56.973 IST [208887] LOG:  database system is ready to accept connections
+2025-06-17 15:47:56.993 IST [209129] LOG:  checkpoint starting: time
+2025-06-17 15:47:57.715 IST [209129] LOG:  checkpoint complete: wrote 7 buffers (0.0%), wrote 0 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.704 s, sync=0.008 s, total=0.722 s; sync files=4, longest=0.007 s, average=0.002 s; distance=28 kB, estimate=136 kB; lsn=0/1C25960, redo lsn=0/1C25908
+2025-06-17 15:51:57.824 IST [208887] LOG:  received fast shutdown request
+2025-06-17 15:51:57.831 IST [208887] LOG:  aborting any active transactions
+2025-06-17 15:51:57.832 IST [209140] FATAL:  terminating connection due to administrator command
+2025-06-17 15:51:57.833 IST [209129] LOG:  shutting down
+2025-06-17 15:51:57.835 IST [209129] LOG:  checkpoint starting: shutdown immediate
+2025-06-17 15:51:57.840 IST [209129] LOG:  checkpoint complete: wrote 0 buffers (0.0%), wrote 0 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.001 s, sync=0.001 s, total=0.007 s; sync files=0, longest=0.000 s, average=0.000 s; distance=0 kB, estimate=122 kB; lsn=0/1C25A10, redo lsn=0/1C25A10
+2025-06-17 15:51:57.850 IST [208887] LOG:  database system is shut down
+2025-06-17 16:08:08.995 IST [235925] LOG:  starting PostgreSQL 18beta1 on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 13.3.0-6ubuntu2~24.04) 13.3.0, 64-bit
+2025-06-17 16:08:08.995 IST [235925] LOG:  could not bind IPv4 address "127.0.0.1": Address already in use
+2025-06-17 16:08:08.995 IST [235925] HINT:  Is another postmaster already running on port 5432? If not, wait a few seconds and retry.
+2025-06-17 16:08:08.995 IST [235925] WARNING:  could not create listen socket for "localhost"
+2025-06-17 16:08:08.995 IST [235925] FATAL:  could not create any TCP/IP sockets
+2025-06-17 16:08:08.997 IST [235925] LOG:  database system is shut down
+2025-06-17 16:25:02.408 IST [244034] LOG:  starting PostgreSQL 18beta1 on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 13.3.0-6ubuntu2~24.04) 13.3.0, 64-bit
+2025-06-17 16:25:02.408 IST [244034] LOG:  listening on IPv4 address "127.0.0.1", port 5432
+2025-06-17 16:25:02.410 IST [244034] LOG:  listening on Unix socket "/tmp/.s.PGSQL.5432"
+2025-06-17 16:25:02.412 IST [244040] LOG:  database system was shut down at 2025-06-17 16:24:48 IST
+2025-06-17 16:25:02.415 IST [244034] LOG:  database system is ready to accept connections
+2025-06-17 16:25:38.704 IST [244056] LOG:  === get_previous_hash START ===
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  === get_previous_hash END ===
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  === compute_curr_hash START ===
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  === compute_curr_hash: desc->natts = 9 ===
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  === compute_curr_hash: Processing attribute 0 ===
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  === compute_curr_hash: Attribute name: id ===
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  === compute_curr_hash: Processing non-NULL attribute id ===
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  === compute_curr_hash: Attribute id value: 6 ===
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  === compute_curr_hash: Processing attribute 1 ===
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  === compute_curr_hash: Attribute name: __row_id ===
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  === compute_curr_hash: Attribute __row_id is NULL ===
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  === compute_curr_hash: Processing attribute 2 ===
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  === compute_curr_hash: Attribute name: __curr_hash ===
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  === compute_curr_hash: Skipping blockchain attribute __curr_hash ===
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  === compute_curr_hash: Processing attribute 3 ===
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  === compute_curr_hash: Attribute name: __prev_hash ===
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  === compute_curr_hash: Skipping blockchain attribute __prev_hash ===
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  === compute_curr_hash: Processing attribute 4 ===
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  === compute_curr_hash: Attribute name: __tx_type ===
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  === compute_curr_hash: Attribute __tx_type is NULL ===
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  === compute_curr_hash: Processing attribute 5 ===
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  === compute_curr_hash: Attribute name: __tx_origin ===
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  === compute_curr_hash: Attribute __tx_origin is NULL ===
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  === compute_curr_hash: Processing attribute 6 ===
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  === compute_curr_hash: Attribute name: __tx_version ===
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  === compute_curr_hash: Attribute __tx_version is NULL ===
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  === compute_curr_hash: Processing attribute 7 ===
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  === compute_curr_hash: Attribute name: __is_latest ===
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  === compute_curr_hash: Attribute __is_latest is NULL ===
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  === compute_curr_hash: Processing attribute 8 ===
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  === compute_curr_hash: Attribute name: __tx_timestamp ===
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  === compute_curr_hash: Skipping blockchain attribute __tx_timestamp ===
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  === compute_curr_hash: Adding timestamp ===
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  === compute_curr_hash: Adding previous hash ===
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  === compute_curr_hash: Finalizing hash ===
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  === compute_curr_hash: Creating result bytea ===
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  === compute_curr_hash END ===
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  Setting __row_id for column __row_id at attno 1
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  Setting __curr_hash for column __curr_hash at attno 2
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  Setting __prev_hash for column __prev_hash at attno 3
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  Setting __tx_type for column __tx_type at attno 4
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  Setting __tx_origin for column __tx_origin at attno 5
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  Setting __tx_version for column __tx_version at attno 6
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  Setting __is_latest for column __is_latest at attno 7
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:38.704 IST [244056] LOG:  Setting __tx_timestamp for column __tx_timestamp at attno 8
+2025-06-17 16:25:38.704 IST [244056] STATEMENT:  INSERT INTO a VALUES (6);
+2025-06-17 16:25:45.201 IST [244056] LOG:  === get_previous_hash START ===
+2025-06-17 16:25:45.201 IST [244056] STATEMENT:  INSERT INTO a VALUES (5);
+2025-06-17 16:25:45.201 IST [244056] LOG:  === get_previous_hash END ===
+2025-06-17 16:25:45.201 IST [244056] STATEMENT:  INSERT INTO a VALUES (5);
+2025-06-17 16:25:45.201 IST [244056] LOG:  === compute_curr_hash START ===
+2025-06-17 16:25:45.201 IST [244056] STATEMENT:  INSERT INTO a VALUES (5);
+2025-06-17 16:25:45.201 IST [244056] LOG:  === compute_curr_hash: desc->natts = 9 ===
+2025-06-17 16:25:45.201 IST [244056] STATEMENT:  INSERT INTO a VALUES (5);
+2025-06-17 16:25:45.201 IST [244056] LOG:  === compute_curr_hash: Processing attribute 0 ===
+2025-06-17 16:25:45.201 IST [244056] STATEMENT:  INSERT INTO a VALUES (5);
+2025-06-17 16:25:45.201 IST [244056] LOG:  === compute_curr_hash: Attribute name: id ===
+2025-06-17 16:25:45.201 IST [244056] STATEMENT:  INSERT INTO a VALUES (5);
+2025-06-17 16:25:45.201 IST [244056] LOG:  === compute_curr_hash: Processing non-NULL attribute id ===
+2025-06-17 16:25:45.201 IST [244056] STATEMENT:  INSERT INTO a VALUES (5);
+2025-06-17 16:25:45.201 IST [244056] LOG:  === compute_curr_hash: Attribute id value: 5 ===
+2025-06-17 16:25:45.201 IST [244056] STATEMENT:  INSERT INTO a VALUES (5);
+2025-06-17 16:25:45.201 IST [244056] LOG:  === compute_curr_hash: Processing attribute 1 ===
+2025-06-17 16:25:45.201 IST [244056] STATEMENT:  INSERT INTO a VALUES (5);
+2025-06-17 16:25:45.201 IST [244056] LOG:  === compute_curr_hash: Attribute name: __row_id ===
+2025-06-17 16:25:45.201 IST [244056] STATEMENT:  INSERT INTO a VALUES (5);
+2025-06-17 16:25:45.201 IST [244056] LOG:  === compute_curr_hash: Attribute __row_id is NULL ===
+2025-06-17 16:25:45.201 IST [244056] STATEMENT:  INSERT INTO a VALUES (5);
+2025-06-17 16:25:45.201 IST [244056] LOG:  === compute_curr_hash: Processing attribute 2 ===
+2025-06-17 16:25:45.201 IST [244056] STATEMENT:  INSERT INTO a VALUES (5);
+2025-06-17 16:25:45.201 IST [244056] LOG:  === compute_curr_hash: Attribute name: __curr_hash ===
+2025-06-17 16:25:45.201 IST [244056] STATEMENT:  INSERT INTO a VALUES (5);
+2025-06-17 16:25:45.201 IST [244056] LOG:  === compute_curr_hash: Skipping blockchain attribute __curr_hash ===
+2025-06-17 16:25:45.201 IST [244056] STATEMENT:  INSERT INTO a VALUES (5);
+2025-06-17 16:25:45.201 IST [244056] LOG:  === compute_curr_hash: Processing attribute 3 ===
+2025-06-17 16:25:45.201 IST [244056] STATEMENT:  INSERT INTO a VALUES (5);
+2025-06-17 16:25:45.201 IST [244056] LOG:  === compute_curr_hash: Attribute name: __prev_hash ===
+2025-06-17 16:25:45.201 IST [244056] STATEMENT:  INSERT INTO a VALUES (5);
+2025-06-17 16:25:45.201 IST [244056] LOG:  === compute_curr_hash: Skipping blockchain attribute __prev_hash ===
+2025-06-17 16:25:45.201 IST [244056] STATEMENT:  INSERT INTO a VALUES (5);
+2025-06-17 16:25:45.201 IST [244056] LOG:  === compute_curr_hash: Processing attribute 4 ===
+2025-06-17 16:25:45.201 IST [244056] STATEMENT:  INSERT INTO a VALUES (5);
+2025-06-17 16:25:45.201 IST [244056] LOG:  === compute_curr_hash: Attribute name: __tx_type ===
+2025-06-17 16:25:45.201 IST [244056] STATEMENT:  INSERT INTO a VALUES (5);
+2025-06-17 16:25:45.201 IST [244056] LOG:  === compute_curr_hash: Attribute __tx_type is NULL ===
+2025-06-17 16:25:45.201 IST [244056] STATEMENT:  INSERT INTO a VALUES (5);
+2025-06-17 16:25:45.202 IST [244056] LOG:  === compute_curr_hash: Processing attribute 5 ===
+2025-06-17 16:25:45.202 IST [244056] STATEMENT:  INSERT INTO a VALUES (5);
+2025-06-17 16:25:45.202 IST [244056] LOG:  === compute_curr_hash: Attribute name: __tx_origin ===
+2025-06-17 16:25:45.202 IST [244056] STATEMENT:  INSERT INTO a VALUES (5);
+2025-06-17 16:25:45.202 IST [244056] LOG:  === compute_curr_hash: Attribute __tx_origin is NULL ===
+2025-06-17 16:25:45.202 IST [244056] STATEMENT:  INSERT INTO a VALUES (5);
+2025-06-17 16:25:45.202 IST [244056] LOG:  === compute_curr_hash: Processing attribute 6 ===
+2025-06-17 16:25:45.202 IST [244056] STATEMENT:  INSERT INTO a VALUES (5);
+2025-06-17 16:25:45.202 IST [244056] LOG:  === compute_curr_hash: Attribute name: __tx_version ===
+2025-06-17 16:25:45.202 IST [244056] STATEMENT:  INSERT INTO a VALUES (5);
+2025-06-17 16:25:45.202 IST [244056] LOG:  === compute_curr_hash: Attribute __tx_version is NULL ===
+2025-06-17 16:25:45.202 IST [244056] STATEMENT:  INSERT INTO a VALUES (5);
+2025-06-17 16:25:45.202 IST [244056] LOG:  === compute_curr_hash: Processing attribute 7 ===
+2025-06-17 16:25:45.202 IST [244056] STATEMENT:  INSERT INTO a VALUES (5);
+2025-06-17 16:25:45.202 IST [244056] LOG:  === compute_curr_hash: Attribute name: __is_latest ===
+2025-06-17 16:25:45.202 IST [244056] STATEMENT:  INSERT INTO a VALUES (5);
+2025-06-17 16:25:45.202 IST [244056] LOG:  === compute_curr_hash: Attribute __is_latest is NULL ===
+2025-06-17 16:25:45.202 IST [244056] STATEMENT:  INSERT INTO a VALUES (5);
+2025-06-17 16:25:45.202 IST [244056] LOG:  === compute_curr_hash: Processing attribute 8 ===
+2025-06-17 16:25:45.202 IST [244056] STATEMENT:  INSERT INTO a VALUES (5);
+2025-06-17 16:25:45.202 IST [244056] LOG:  === compute_curr_hash: Attribute name: __tx_timestamp ===
+2025-06-17 16:25:45.202 IST [244056] STATEMENT:  INSERT INTO a VALUES (5);
+2025-06-17 16:25:45.202 IST [244056] LOG:  === compute_curr_hash: Skipping blockchain attribute __tx_timestamp ===
+2025-06-17 16:25:45.202 IST [244056] STATEMENT:  INSERT INTO a VALUES (5);
+2025-06-17 16:25:45.202 IST [244056] LOG:  === compute_curr_hash: Adding timestamp ===
+2025-06-17 16:25:45.202 IST [244056] STATEMENT:  INSERT INTO a VALUES (5);
+2025-06-17 16:25:45.202 IST [244056] LOG:  === compute_curr_hash: Adding previous hash ===
+2025-06-17 16:25:45.202 IST [244056] STATEMENT:  INSERT INTO a VALUES (5);
+2025-06-17 16:25:45.746 IST [244034] LOG:  client backend (PID 244056) was terminated by signal 11: Segmentation fault
+2025-06-17 16:25:45.746 IST [244034] DETAIL:  Failed process was running: INSERT INTO a VALUES (5);
+2025-06-17 16:25:45.746 IST [244034] LOG:  terminating any other active server processes
+2025-06-17 16:25:45.746 IST [244080] FATAL:  the database system is in recovery mode
+2025-06-17 16:25:45.747 IST [244034] LOG:  all server processes terminated; reinitializing
+2025-06-17 16:25:45.772 IST [244084] LOG:  database system was interrupted; last known up at 2025-06-17 16:25:02 IST
+2025-06-17 16:25:45.809 IST [244084] LOG:  database system was not properly shut down; automatic recovery in progress
+2025-06-17 16:25:45.811 IST [244084] LOG:  redo starts at 0/1760BF0
+2025-06-17 16:25:45.818 IST [244084] LOG:  invalid record length at 0/1BA4B68: expected at least 24, got 0
+2025-06-17 16:25:45.818 IST [244084] LOG:  redo done at 0/1BA4B40 system usage: CPU: user: 0.00 s, system: 0.00 s, elapsed: 0.00 s
+2025-06-17 16:25:45.821 IST [244085] LOG:  checkpoint starting: end-of-recovery immediate wait
+2025-06-17 16:25:45.842 IST [244085] LOG:  checkpoint complete: wrote 947 buffers (5.8%), wrote 3 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.007 s, sync=0.011 s, total=0.022 s; sync files=306, longest=0.001 s, average=0.001 s; distance=4367 kB, estimate=4367 kB; lsn=0/1BA4B68, redo lsn=0/1BA4B68
+2025-06-17 16:25:45.844 IST [244034] LOG:  database system is ready to accept connections
+2025-06-17 16:30:45.846 IST [244085] LOG:  checkpoint starting: time
+2025-06-17 16:30:46.368 IST [244085] LOG:  checkpoint complete: wrote 5 buffers (0.0%), wrote 0 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.503 s, sync=0.008 s, total=0.522 s; sync files=5, longest=0.008 s, average=0.002 s; distance=18 kB, estimate=3933 kB; lsn=0/1BA95E8, redo lsn=0/1BA9590

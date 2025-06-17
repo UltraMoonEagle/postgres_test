@@ -28,6 +28,7 @@
 #include "access/xact.h"
 #include "access/xlog.h"
 #include "access/xloginsert.h"
+#include "blockchain/blockchainam.h"
 #include "catalog/catalog.h"
 #include "catalog/heap.h"
 #include "catalog/index.h"
@@ -1027,50 +1028,15 @@ DefineRelation(CreateStmt *stmt, char relkind, Oid ownerId,
 
 	if (stmt->is_blockchain)
 	{
-		ListCell *cell;
-		foreach(cell, stmt->tableElts)
+		for(int i = 0; i < NUM_BLOCKCHAIN_COLUMNS; i++)
 		{
-			ColumnDef *col = (ColumnDef *) lfirst(cell);
-			if (strcmp(col->colname, "prev_hash") == 0 ||
-				strcmp(col->colname, "curr_hash") == 0 ||
-				strcmp(col->colname, "ts") == 0)
-			{
-				ereport(ERROR,
-						(errcode(ERRCODE_INVALID_TABLE_DEFINITION),
-						errmsg("column name \"%s\" is reserved for BLOCKCHAIN TABLE", col->colname)));
-			}
+			ColumnDef *col = makeNode(ColumnDef);
+			col->colname = pstrdup(blockchain_system_columns[i].name);
+			col->typeName = makeTypeNameFromOid(blockchain_system_columns[i].type_oid, blockchain_system_columns[i].typmod);
+			col->is_local = true;
+			col->is_not_null = false;
+			stmt->tableElts = lappend(stmt->tableElts, col);	
 		}
-
-    ColumnDef *prev_hash_col = makeNode(ColumnDef);
-				prev_hash_col->colname = "prev_hash";
-				prev_hash_col->typeName = makeTypeNameFromNameList(
-					list_make2(makeString("pg_catalog"), makeString("bytea")));
-				prev_hash_col->is_not_null = true;
-				prev_hash_col->is_local = true;
-				prev_hash_col->inhcount = 0;
-				prev_hash_col->is_from_type = false;
-
-    ColumnDef *curr_hash_col = makeNode(ColumnDef);
-				curr_hash_col->colname = "curr_hash";
-				curr_hash_col->typeName = makeTypeNameFromNameList(
-					list_make2(makeString("pg_catalog"), makeString("bytea")));
-				curr_hash_col->is_not_null = true;
-				curr_hash_col->is_local = true;
-				curr_hash_col->inhcount = 0;
-				curr_hash_col->is_from_type = false;
-
-    ColumnDef *ts_col = makeNode(ColumnDef);
-				ts_col->colname = "ts";
-				ts_col->typeName = makeTypeNameFromNameList(
-					list_make2(makeString("pg_catalog"), makeString("timestamptz")));
-				ts_col->is_not_null = true;
-				ts_col->is_local = true;
-				ts_col->inhcount = 0;
-				ts_col->is_from_type = false;
-
-		stmt->tableElts = lappend(stmt->tableElts, prev_hash_col);
-		stmt->tableElts = lappend(stmt->tableElts, curr_hash_col);
-		stmt->tableElts = lappend(stmt->tableElts, ts_col);
 	}
 
 	

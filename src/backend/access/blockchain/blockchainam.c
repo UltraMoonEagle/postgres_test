@@ -62,6 +62,9 @@
 #include "common/sha2.h"
 #include "access/hash.h"
 
+#include "blockchain/blockchainam.h"
+#include "blockchain/blockchain_hash.h"
+
 
 PG_FUNCTION_INFO_V1(blockchain_tableam_handler);
 
@@ -105,9 +108,13 @@ static bool BitmapHeapScanNextBlock(TableScanDesc scan,
 									bool *recheck,
 									uint64 *lossy_pages, uint64 *exact_pages);
 
-// static bytea * get_previous_hash(Relation relation);
+static void SlotSetAttr(TupleTableSlot *slot, int attnum, Datum value);
 
-// static bytea *compute_curr_hash(Relation relation, TupleTableSlot *slot);
+Datum generate_uuid_datum(void);
+int get_attnum_by_name(TupleDesc tupdesc, const char *name);
+static bytea * get_previous_hash(Relation rel);
+
+static bytea *compute_curr_hash(Relation rel, TupleTableSlot *slot, TimestampTz ts, bytea *prev_hash);
 
 /* ------------------------------------------------------------------------
  * Slot related callbacks for heap AM
@@ -2674,7 +2681,7 @@ const TableAmRoutine blockchainam_methods= {
 	.scan_set_tidrange = heap_set_tidrange,
 	.scan_getnextslot_tidrange = heap_getnextslot_tidrange,
 
-	.parallelscan_estimate = table_block_parallelscan_estimate,
+	.parallelscan_estimate = table_block_parallelscan_estimate, 	
 	.parallelscan_initialize = table_block_parallelscan_initialize,
 	.parallelscan_reinitialize = table_block_parallelscan_reinitialize,
 
@@ -2732,8 +2739,8 @@ blockchain_tableam_handler(PG_FUNCTION_ARGS)
 static const TupleTableSlotOps *
 blockchainam_slot_callbacks(Relation relation)
 {
-		elog(LOG, "blockchainam_slot_callbacks called for relation %s",
-			 RelationGetRelationName(relation));
+		// elog(LOG, "blockchainam_slot_callbacks called for relation %s",
+		//	  RelationGetRelationName(relation));
 	    return &TTSOpsBufferHeapTuple;
 }
 
@@ -2766,33 +2773,138 @@ blockchainam_tuple_delete(Relation rel, ItemPointer tid,
 
 
 /* Insert a tuple into a blockchain table, computing hashes and timestamps */
+
+/*Can optimize lookup for loops, bad logic incoming*/
 static void
 blockchainam_tuple_insert(Relation relation, TupleTableSlot *slot,
-                          CommandId cid, int options, BulkInsertState bistate)
+                         CommandId cid, int options, BulkInsertState bistate)
 {
-	// TimestampTz ts = GetCurrentTimestamp();
-	// bytea *prev_hash = get_previous_hash(relation);
-	// bytea *curr_hash = compute_curr_hash(relation, slot);
+    TupleDesc tupdesc = RelationGetDescr(relation);
+    int natts = tupdesc->natts;
+    TimestampTz ts = GetCurrentTimestamp();
+       
+    // Create a virtual slot with proper initialization
+    TupleTableSlot *virtualslot = MakeSingleTupleTableSlot(tupdesc, &TTSOpsVirtual);
+    ExecClearTuple(virtualslot);
+    
+    // Ensure source slot is materialized
+    slot_getallattrs(slot);
+    ExecMaterializeSlot(slot);
+    
+    int base_attno = natts - NUM_BLOCKCHAIN_COLUMNS;
+    
+    // Copy user data columns
+    for(int i = 0; i < base_attno; i++)
+    {
+        virtualslot->tts_values[i] = slot->tts_values[i];
+        virtualslot->tts_isnull[i] = slot->tts_isnull[i];
+    }
 
-	// /* Find attribute numbers and inject the values */
-	// TupleDesc desc = RelationGetDescr(relation);
-	// slot_getallattrs(slot); // Force deconstruction
-	// for (int i = 0; i < desc->natts; i++)
-	// {
-	// 	Form_pg_attribute attr = TupleDescAttr(desc, i);
-	// 	if (strcmp(NameStr(attr->attname), "prev_hash") == 0)
-	// 		slot->tts_values[i] = PointerGetDatum(prev_hash), slot->tts_isnull[i] = false;
-	// 	else if (strcmp(NameStr(attr->attname), "curr_hash") == 0)
-	// 		slot->tts_values[i] = PointerGetDatum(curr_hash), slot->tts_isnull[i] = false;
-	// 	else if (strcmp(NameStr(attr->attname), "ts") == 0)
-	// 		slot->tts_values[i] = TimestampTzGetDatum(ts), slot->tts_isnull[i] = false;
-	// }
-
-	ExecMaterializeSlot(slot);  // Ensure it's fully formed for heap insert
-
-	heapam_tuple_insert(relation, slot, cid, options, bistate);
+	bytea *prev_hash = get_previous_hash(relation);
+    bytea *curr_hash = compute_curr_hash(relation, slot, ts, prev_hash);
+    
+    // Make copies of hash values to ensure they persist
+    bytea *prev_hash_copy = NULL;
+    bytea *curr_hash_copy = NULL;
+    
+    if (prev_hash)
+    {
+        Size len = VARSIZE(prev_hash);
+        prev_hash_copy = (bytea *) palloc(len);
+        memcpy(prev_hash_copy, prev_hash, len);
+    }
+    
+    if (curr_hash)
+    {
+        Size len = VARSIZE(curr_hash);
+        curr_hash_copy = (bytea *) palloc(len);
+        memcpy(curr_hash_copy, curr_hash, len);
+    }
+    
+    // Initialize blockchain columns
+    for (int i = base_attno; i < natts; i++)
+    {
+        Form_pg_attribute attr = TupleDescAttr(tupdesc, i);
+        
+        // Skip dropped attributes
+        if(attr->attisdropped)
+        {
+            virtualslot->tts_isnull[i] = true;
+            continue;
+        }
+        
+        const char *colname = NameStr(attr->attname);
+        
+        if (strcmp(colname, "__row_id") == 0)
+        {
+            elog(LOG, "Setting __row_id for column %s at attno %d", colname, i);
+            virtualslot->tts_values[i] = generate_uuid_datum();
+            virtualslot->tts_isnull[i] = false;
+        }
+        else if (strcmp(colname, "__tx_type") == 0)
+        {
+            elog(LOG, "Setting __tx_type for column %s at attno %d", colname, i);
+            virtualslot->tts_values[i] = CStringGetTextDatum("INSERT");
+            virtualslot->tts_isnull[i] = false;
+        }
+        else if (strcmp(colname, "__tx_origin") == 0)
+        {
+            elog(LOG, "Setting __tx_origin for column %s at attno %d", colname, i);
+            virtualslot->tts_isnull[i] = true; // Set to NULL
+        }
+        else if (strcmp(colname, "__tx_version") == 0)
+        {
+            elog(LOG, "Setting __tx_version for column %s at attno %d", colname, i);
+            virtualslot->tts_values[i] = Int32GetDatum(1);
+            virtualslot->tts_isnull[i] = false;
+        }
+        else if (strcmp(colname, "__is_latest") == 0)
+        {
+            elog(LOG, "Setting __is_latest for column %s at attno %d", colname, i);
+            virtualslot->tts_values[i] = BoolGetDatum(true);
+            virtualslot->tts_isnull[i] = false;
+        }
+        else if (strcmp(colname, "__tx_timestamp") == 0)
+        {
+            elog(LOG, "Setting __tx_timestamp for column %s at attno %d", colname, i);
+            virtualslot->tts_values[i] = TimestampTzGetDatum(ts);
+            virtualslot->tts_isnull[i] = false;
+        }
+        else if (strcmp(colname, "__prev_hash") == 0)
+        {
+            elog(LOG, "Setting __prev_hash for column %s at attno %d", colname, i);
+            if(prev_hash_copy)
+            {
+                virtualslot->tts_values[i] = PointerGetDatum(prev_hash_copy);
+                virtualslot->tts_isnull[i] = false;
+            }
+            else
+            {
+                virtualslot->tts_isnull[i] = true;
+            }
+        }
+        else if (strcmp(colname, "__curr_hash") == 0)
+        {
+            elog(LOG, "Setting __curr_hash for column %s at attno %d", colname, i);
+            virtualslot->tts_values[i] = PointerGetDatum(curr_hash_copy);
+            virtualslot->tts_isnull[i] = false;
+        }
+        else
+        {
+            elog(LOG, "Unknown blockchain column %s at attno %d", colname, i);
+            virtualslot->tts_isnull[i] = true;
+        }
+    }
+    
+    // Mark the slot as valid and store the virtual tuple
+    ExecStoreVirtualTuple(virtualslot);
+    
+    // Insert the tuple
+    heapam_tuple_insert(relation, virtualslot, cid, options, bistate);
+    
+    // Clean up the virtual slot
+    ExecDropSingleTupleTableSlot(virtualslot);
 }
-
 
 static void
 blockchainam_tuple_complete_speculative(Relation rel, TupleTableSlot *slot,
@@ -2812,47 +2924,6 @@ blockchainam_tuple_insert_speculative(Relation rel, TupleTableSlot *slot,
          errmsg("INSERT ON CONFLICT not supported on blockchain table (from am)")));
 }
 
-// static bytea *
-// compute_curr_hash(Relation relation, TupleTableSlot *slot)
-// {
-//     TupleDesc tupdesc = RelationGetDescr(relation);
-//     StringInfoData buf;
-//     int i;
-
-// 	pg_sha256_ctx ctx;
-//     uint8 hash[PG_SHA256_DIGEST_LENGTH];
-
-//     initStringInfo(&buf);
-
-//     for (i = 0; i < slot->tts_nvalid; i++)
-//     {
-//         if (slot->tts_values[i] == (Datum) 0 || slot->tts_isnull[i])
-//             continue;
-
-//         if (TupleDescAttr(tupdesc, i)->attgenerated)
-//             continue; // skip generated cols
-
-//         Oid typOutput;
-//         bool typIsVarlena;
-
-//         getTypeOutputInfo(TupleDescAttr(tupdesc, i)->atttypid,
-//                           &typOutput, &typIsVarlena);
-//         char *str = OidOutputFunctionCall(typOutput, slot->tts_values[i]);
-//         appendStringInfoString(&buf, str);
-//     }
-
-   
-//     pg_sha256_init(&ctx);
-//     pg_sha256_update(&ctx, (uint8 *) buf.data, buf.len);
-//     pg_sha256_final(&ctx, hash);
-
-//     bytea *result = (bytea *) palloc(VARHDRSZ + PG_SHA256_DIGEST_LENGTH);
-//     SET_VARSIZE(result, VARHDRSZ + PG_SHA256_DIGEST_LENGTH);
-//     memcpy(VARDATA(result), hash, PG_SHA256_DIGEST_LENGTH);
-
-//     return result;
-// }
-
 // INSERT INTO blockchain (id, prev_hash, curr_hash, ts) VALUES
 // (1,
 //  E'\\x0000000000000000000000000000000000000000000000000000000000000000',
@@ -2865,55 +2936,191 @@ GetBlockchainTableAmRoutine(void)
 	return &blockchainam_methods;
 }
 
-static bytea *
-get_previous_hash(Relation relation)
-{
-    TableScanDesc scan;
-    HeapTuple tuple;
-    TupleDesc tupdesc = RelationGetDescr(relation);
-    int attnum = -1;
+// static void
+// SlotSetAttr(TupleTableSlot *slot, int attnum, Datum value)
+// {
+// 	Assert(attnum > 0 && attnum <= slot->tts_tupleDescriptor->natts);
 
-    for (int i = 0; i < tupdesc->natts; i++)
+// 	slot->tts_values[attnum - 1] = value;
+// 	slot->tts_isnull[attnum - 1] = false;
+// }
+
+Datum
+generate_uuid_datum(void)
+{
+    pg_uuid_t *uuid = (pg_uuid_t *) palloc(sizeof(pg_uuid_t));
+
+    if (!pg_strong_random(uuid->data, UUID_LEN))
+        elog(ERROR, "could not generate random UUID");
+
+    /*
+     * Set the variant and version bits per RFC 4122.
+     * - Set version (byte 6 high nibble) = 0b0100
+     * - Set variant (byte 8 high bits) = 0b10xxxxxx
+     */
+    uuid->data[6] = (uuid->data[6] & 0x0F) | 0x40;
+    uuid->data[8] = (uuid->data[8] & 0x3F) | 0x80;
+
+    return UUIDPGetDatum(uuid);
+}
+
+
+int get_attnum_by_name(TupleDesc tupdesc, const char *name)
+{
+	
+	for (int i = 0; i < tupdesc->natts; i++)
+	{
+		Form_pg_attribute attr = TupleDescAttr(tupdesc, i);
+			elog(LOG, "Attr %d: name='%s', attisdropped=%d", i, NameStr(attr->attname), attr->attisdropped);
+
+		if(!attr->attisdropped && strcmp(NameStr(attr->attname), name) == 0)
+		{
+			elog(LOG, "get_attnum_by_name: found %s at %d", name, i + 1);
+			return i+1;
+		}
+
+	}
+	elog(ERROR, "System column \"%s\" not found", name);
+	return -1;
+}
+
+bytea *
+get_previous_hash(Relation rel)
+{
+    TupleTableSlot *slot;
+    TableScanDesc scan;
+    bytea *prev_hash = NULL;
+    int curr_hash_attno = -1;
+    TupleDesc desc = RelationGetDescr(rel);
+    
+    elog(LOG, "=== get_previous_hash START ===");
+    
+    /* Find the attribute number of curr_hash */
+    for (int i = 0; i < desc->natts; i++)
     {
-        if (strcmp(NameStr(TupleDescAttr(tupdesc, i)->attname), "curr_hash") == 0)
+        Form_pg_attribute attr = TupleDescAttr(desc, i);
+        if (strcmp(NameStr(attr->attname), "__curr_hash") == 0)
         {
-            attnum = i + 1;
+            curr_hash_attno = i;
             break;
         }
     }
-
-    if (attnum == -1)
-        elog(ERROR, "curr_hash column not found");
-
-    scan = table_beginscan(relation, GetLatestSnapshot(), 0, NULL);
-    bytea *latest = NULL;
-
-    while ((tuple = heap_getnext(scan, ForwardScanDirection)) != NULL)
+    
+    if (curr_hash_attno == -1)
+        elog(ERROR, "__curr_hash column not found");
+    
+    /* Start a table scan */
+    scan = table_beginscan_strat(rel, SnapshotAny, 0, NULL, true, true);
+    slot = table_slot_create(rel, NULL);
+    
+    while (table_scan_getnextslot(scan, BackwardScanDirection, slot))
     {
-        Datum val;
-        bool isnull;
-        val = heap_getattr(tuple, attnum, tupdesc, &isnull);
-
-        if (!isnull)
+        /* Get the most recent tuple */
+        if (!TupIsNull(slot))
         {
-            if (latest != NULL)
-                pfree(latest);
-            latest = DatumGetByteaP(val);  // Assumes bytea not toasted
+            slot_getallattrs(slot);
+            if (!slot->tts_isnull[curr_hash_attno])
+            {
+                Datum d = slot->tts_values[curr_hash_attno];
+                bool isvarlena = true;
+                prev_hash = (bytea *) datumCopy(d, isvarlena, -1);
+                break; // got latest row
+            }
         }
     }
-
+    
     table_endscan(scan);
-
-    if (latest == NULL)
+    ExecDropSingleTupleTableSlot(slot);
+    
+    if (prev_hash == NULL)
     {
-        // Genesis hash
-        const char *zero = "GENESIS";
-        int len = strlen(zero);
-        bytea *result = (bytea *) palloc(VARHDRSZ + len);
-        SET_VARSIZE(result, VARHDRSZ + len);
-        memcpy(VARDATA(result), zero, len);
-        return result;
+        /* First row ever */
+        prev_hash = palloc0(VARHDRSZ + 32); // 32 bytes for dummy hash
+        SET_VARSIZE(prev_hash, VARHDRSZ + 32);
+        memset(VARDATA(prev_hash), 0, 32);
     }
+    
+    elog(LOG, "=== get_previous_hash END ===");
+    return prev_hash;
+}
 
-    return latest;
+// Modified to accept prev_hash as parameter instead of computing it
+bytea *
+compute_curr_hash(Relation rel, TupleTableSlot *slot, TimestampTz ts, bytea *prev_hash)
+{
+    elog(LOG, "=== compute_curr_hash START ===");
+    
+    bc_sha256_ctx ctx;
+    unsigned char hash[BC_SHA256_DIGEST_LENGTH];
+    TupleDesc desc = RelationGetDescr(rel);
+    
+    slot_getallattrs(slot); // Ensure all attributes are fetched
+    
+    /* Start SHA256 context */
+    bc_sha256_init(&ctx);
+    
+    /* Include user-visible attributes (skip prev_hash, curr_hash, ts) */
+    for (int i = 0; i < desc->natts; i++)
+    {
+        Form_pg_attribute attr = TupleDescAttr(desc, i);
+        if (attr->attisdropped || attr->attgenerated)
+            continue;
+            
+        const char *name = NameStr(attr->attname);
+        if (strcmp(name, "__prev_hash") == 0 ||
+            strcmp(name, "__curr_hash") == 0 ||
+            strcmp(name, "__tx_timestamp") == 0)  // Fixed: was "__tx_time"
+            continue;
+        
+        /* Add value to hash (as text representation) */
+        if (slot->tts_isnull[i])
+            bc_sha256_update(&ctx, (const uint8 *)"NULL", 4);
+        else
+        {
+            Datum val = slot->tts_values[i];
+            Oid typoutput;
+            bool typisvarlena;
+            char *str;
+            
+            getTypeOutputInfo(attr->atttypid, &typoutput, &typisvarlena);
+            
+            PG_TRY();
+            {
+                str = OidOutputFunctionCall(typoutput, val);
+                bc_sha256_update(&ctx, (const uint8 *)str, strlen(str));
+                pfree(str); // Free the string after hashing
+            }
+            PG_CATCH();
+            {
+                /* Handle any errors in type output */
+                elog(ERROR, "Error converting attribute %s to text", name);
+                FlushErrorState();
+                bc_sha256_update(&ctx, (const uint8 *)"ERROR", 5);
+            }
+            PG_END_TRY();
+        }
+    }
+    
+    /* Add timestamp */
+    char tsbuf[64];
+    snprintf(tsbuf, sizeof(tsbuf), INT64_FORMAT, (int64)ts);
+    bc_sha256_update(&ctx, (const uint8 *) tsbuf, strlen(tsbuf));
+    
+    /* Add previous hash (passed as parameter) */
+    if (prev_hash != NULL)
+    {
+        bc_sha256_update(&ctx, (const uint8 *) VARDATA(prev_hash), 
+                        VARSIZE(prev_hash) - VARHDRSZ);
+    }
+    
+    /* Finalize */
+    bc_sha256_final(&ctx, hash);
+    
+    /* Return as bytea */
+    bytea *res = (bytea *)palloc(VARHDRSZ + BC_SHA256_DIGEST_LENGTH);
+    SET_VARSIZE(res, VARHDRSZ + BC_SHA256_DIGEST_LENGTH);
+    memcpy(VARDATA(res), hash, BC_SHA256_DIGEST_LENGTH);
+    
+    elog(LOG, "=== compute_curr_hash END ===");
+    return res;
 }
