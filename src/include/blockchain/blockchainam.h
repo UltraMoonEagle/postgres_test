@@ -34,6 +34,7 @@ static BlockchainColumnDef blockchain_system_columns[] = {
 	{"__curr_hash", BYTEAOID, -1, -1},
 	{"__prev_hash", BYTEAOID, -1, -1},
 	{"__tx_type", TEXTOID, -1, -1},
+	{"__tx_lsn", PG_LSNOID, -1, -1},
 	{"__tx_origin", UUIDOID, -1, -1},
 	{"__tx_version", INT4OID, -1, -1},
 	{"__is_latest", BOOLOID, -1, -1},

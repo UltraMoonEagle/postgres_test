@@ -112,9 +112,9 @@ static void SlotSetAttr(TupleTableSlot *slot, int attnum, Datum value);
 
 Datum generate_uuid_datum(void);
 int get_attnum_by_name(TupleDesc tupdesc, const char *name);
-static bytea * get_previous_hash(Relation rel);
-
-static bytea *compute_curr_hash(Relation rel, TupleTableSlot *slot, TimestampTz ts, bytea *prev_hash);
+void
+get_previous_hash_and_lsn(Relation relation, bytea **prev_hash_out, XLogRecPtr *prev_lsn_out);
+bytea *compute_curr_hash(Relation rel, TupleTableSlot *slot, TimestampTz ts, bytea *prev_hash, XLogRecPtr tx_lsn);
 
 /* ------------------------------------------------------------------------
  * Slot related callbacks for heap AM
@@ -2789,9 +2789,13 @@ blockchainam_tuple_insert(Relation relation, TupleTableSlot *slot,
     TupleTableSlot *virtualslot = MakeSingleTupleTableSlot(tupdesc, &TTSOpsVirtual);
     ExecClearTuple(virtualslot);
 
-	elog(LOG, "Copying user data into first virtual slot");
-	bytea *prev_hash = get_previous_hash(relation);
-    bytea *curr_hash = compute_curr_hash(relation, slot, ts, prev_hash);
+	bytea *prev_hash = NULL;
+	XLogRecPtr prev_lsn = InvalidXLogRecPtr;
+	XLogRecPtr curr_lsn = XactLastRecEnd;
+
+	get_previous_hash_and_lsn(relation, &prev_hash, &prev_lsn);
+    bytea *curr_hash = compute_curr_hash(relation, slot, ts, prev_hash, curr_lsn);
+
     bytea *prev_hash_copy = NULL;
     bytea *curr_hash_copy = NULL;
 
@@ -2849,6 +2853,12 @@ blockchainam_tuple_insert(Relation relation, TupleTableSlot *slot,
             virtualslot->tts_values[i] = CStringGetTextDatum("INSERT");
             virtualslot->tts_isnull[i] = false;
         }
+        else if (strcmp(colname, "__tx_lsn") == 0)
+        {
+            elog(LOG, "Setting __tx_lsn for column %s at attno %d", colname, i);
+            virtualslot->tts_values[i] = LSNGetDatum(curr_lsn);
+            virtualslot->tts_isnull[i] = false;
+        }
         else if (strcmp(colname, "__tx_origin") == 0)
         {
             elog(LOG, "Setting __tx_origin for column %s at attno %d", colname, i);
@@ -2900,7 +2910,7 @@ blockchainam_tuple_insert(Relation relation, TupleTableSlot *slot,
     
     // Mark the slot as valid and store the virtual tuple
     ExecStoreVirtualTuple(virtualslot);
-    
+
     // Insert the tuple
     heapam_tuple_insert(relation, virtualslot, cid, options, bistate);
 
@@ -3011,199 +3021,338 @@ int get_attnum_by_name(TupleDesc tupdesc, const char *name)
 	return -1;
 }
 
-bytea *
-get_previous_hash(Relation relation)
+void
+get_previous_hash_and_lsn(Relation relation, bytea **prev_hash_out, XLogRecPtr *prev_lsn_out)
 {
     TableScanDesc scan;
     HeapTuple tuple;
     bytea *prev_hash = NULL;
+    XLogRecPtr prev_lsn = InvalidXLogRecPtr;
 
     TupleDesc tupdesc = RelationGetDescr(relation);
     int natts = tupdesc->natts;
-    int curr_hash_attno = -1;
 
-    // Find the attno of __curr_hash
+    int curr_hash_attno = -1;
+    int tx_lsn_attno = -1;
+
+    // Find attnos for __curr_hash and _tx_lsn
     for (int i = 0; i < natts; i++)
     {
         Form_pg_attribute attr = TupleDescAttr(tupdesc, i);
-        if (!attr->attisdropped && strcmp(NameStr(attr->attname), "__curr_hash") == 0)
+
+        if (!attr->attisdropped)
         {
-            curr_hash_attno = i + 1; // PostgreSQL attnos are 1-based
-            break;
+            const char *name = NameStr(attr->attname);
+            if (strcmp(name, "__curr_hash") == 0)
+                curr_hash_attno = i + 1;
+            else if (strcmp(name, "__tx_lsn") == 0)
+                tx_lsn_attno = i + 1;
         }
     }
 
-    if (curr_hash_attno == -1)
-    {
-        elog(ERROR, "Could not find __curr_hash column");
-    }
+    if (curr_hash_attno == -1 || tx_lsn_attno == -1)
+        elog(ERROR, "Could not find __curr_hash or __tx_lsn column");
 
-    // Do a full table scan (optionally use index scan or syscache optimization)
     scan = table_beginscan(relation, GetActiveSnapshot(), 0, NULL);
-	bool found_hash = false;
+    bool found_hash = false;
 
     while ((tuple = heap_getnext(scan, ForwardScanDirection)) != NULL)
     {
-        bool isnull;
-        Datum hash_val = heap_getattr(tuple, curr_hash_attno, tupdesc, &isnull);
+        bool isnull_hash, isnull_lsn;
+        Datum hash_val = heap_getattr(tuple, curr_hash_attno, tupdesc, &isnull_hash);
+        Datum lsn_val = heap_getattr(tuple, tx_lsn_attno, tupdesc, &isnull_lsn);
 
-        if (!isnull)
+        if (!isnull_hash && !isnull_lsn)
         {
-            // Always update to get the last row
             if (prev_hash)
                 pfree(prev_hash);
+
             prev_hash = (bytea *) DatumGetPointer(PG_DETOAST_DATUM_COPY(hash_val));
-			found_hash = true;
+            prev_lsn = DatumGetLSN(lsn_val);
+            found_hash = true;
         }
     }
     table_endscan(scan);
-   
-	if(!found_hash)
-	{
-		prev_hash = (bytea *) palloc(VARHDRSZ + BC_SHA256_DIGEST_LENGTH);
-		SET_VARSIZE(prev_hash, VARHDRSZ + BC_SHA256_DIGEST_LENGTH);
-		memset(VARDATA(prev_hash), 0, BC_SHA256_DIGEST_LENGTH); // Initialize to zero
-		elog(LOG, "No previous hash found, initializing to zero");
-		
-	}
-    elog(LOG, "=== get_previous_hash END ===");
-    return prev_hash;
+
+    // If nothing found, return zeroed values
+    if (!found_hash)
+    {
+        prev_hash = (bytea *) palloc(VARHDRSZ + BC_SHA256_DIGEST_LENGTH);
+        SET_VARSIZE(prev_hash, VARHDRSZ + BC_SHA256_DIGEST_LENGTH);
+        memset(VARDATA(prev_hash), 0, BC_SHA256_DIGEST_LENGTH);
+
+        prev_lsn = InvalidXLogRecPtr;
+
+        elog(LOG, "No previous hash or lsn found, initializing to zero");
+    }
+
+    *prev_hash_out = prev_hash;
+    *prev_lsn_out = prev_lsn;
+
+    elog(LOG, "=== get_previous_hash_and_lsn END ===");
 }
 
-// Modified to accept prev_hash as parameter instead of computing it
-bytea *
-compute_curr_hash(Relation rel, TupleTableSlot *slot, TimestampTz ts, bytea *prev_hash)
-{
-    elog(LOG, "=== compute_curr_hash START ===");
-    
-    bc_sha256_ctx ctx;
-    TupleDesc desc = RelationGetDescr(rel);
-    int natts = desc->natts;
-    
-    /* Initialize context to zero first */
-    memset(&ctx, 0, sizeof(bc_sha256_ctx)); 
-    unsigned char hash[BC_SHA256_DIGEST_LENGTH];
-      
-    slot_getallattrs(slot); // Ensure all attributes are fetched
-      
-    /* Start SHA256 context */
-    bc_sha256_init(&ctx);
-    elog(LOG, "=== SHA Context initialized %p ===", (void *)&ctx);
+
+// bytea *
+// get_previous_hash(Relation relation)
+// {
+//     TableScanDesc scan;
+//     HeapTuple tuple;
+//     bytea *prev_hash = NULL;
+
+//     TupleDesc tupdesc = RelationGetDescr(relation);
+//     int natts = tupdesc->natts;
+//     int curr_hash_attno = -1;
+
+//     // Find the attno of __curr_hash
+//     for (int i = 0; i < natts; i++)
+//     {
+//         Form_pg_attribute attr = TupleDescAttr(tupdesc, i);
+//         if (!attr->attisdropped && strcmp(NameStr(attr->attname), "__curr_hash") == 0)
+//         {
+//             curr_hash_attno = i + 1; // PostgreSQL attnos are 1-based
+//             break;
+//         }
+//     }
+
+//     if (curr_hash_attno == -1)
+//     {
+//         elog(ERROR, "Could not find __curr_hash column");
+//     }
+
+//     // Do a full table scan (optionally use index scan or syscache optimization)
+//     scan = table_beginscan(relation, GetActiveSnapshot(), 0, NULL);
+// 	bool found_hash = false;
+
+//     while ((tuple = heap_getnext(scan, ForwardScanDirection)) != NULL)
+//     {
+//         bool isnull;
+//         Datum hash_val = heap_getattr(tuple, curr_hash_attno, tupdesc, &isnull);
+
+//         if (!isnull)
+//         {
+//             // Always update to get the last row
+//             if (prev_hash)
+//                 pfree(prev_hash);
+//             prev_hash = (bytea *) DatumGetPointer(PG_DETOAST_DATUM_COPY(hash_val));
+// 			found_hash = true;
+//         }
+//     }
+//     table_endscan(scan);
    
-    /* Include user-visible attributes (skip prev_hash, curr_hash, ts) */
-    for (int i = 0; i < natts; i++)
+// 	if(!found_hash)
+// 	{
+// 		prev_hash = (bytea *) palloc(VARHDRSZ + BC_SHA256_DIGEST_LENGTH);
+// 		SET_VARSIZE(prev_hash, VARHDRSZ + BC_SHA256_DIGEST_LENGTH);
+// 		memset(VARDATA(prev_hash), 0, BC_SHA256_DIGEST_LENGTH); // Initialize to zero
+// 		elog(LOG, "No previous hash found, initializing to zero");
+		
+// 	}
+//     elog(LOG, "=== get_previous_hash END ===");
+//     return prev_hash;
+// }
+
+bytea *
+compute_curr_hash(Relation rel, TupleTableSlot *slot, TimestampTz ts,  bytea *prev_hash, XLogRecPtr tx_lsn)
+{
+    bc_sha256_ctx ctx;
+    bytea hash_output[BC_SHA256_DIGEST_LENGTH];
+    bytea *result;
+    char lsnbuf[64];
+
+    memset(&ctx, 0, sizeof(bc_sha256_ctx));
+    bc_sha256_init(&ctx);
+
+    // 1. Hash previous hash
+    if (prev_hash && VARSIZE_ANY_EXHDR(prev_hash) > 0)
     {
-        elog(LOG, "=== Processing attribute %d ===", i);
-
-        Form_pg_attribute attr = TupleDescAttr(desc, i);
-        if (attr->attisdropped || attr->attgenerated)
-            continue;
-            
-        const char *name = NameStr(attr->attname);
-        if (strcmp(name, "__prev_hash") == 0 ||
-            strcmp(name, "__curr_hash") == 0 ||
-            strcmp(name, "__tx_timestamp") == 0)  
-            continue;
-        
-        /* Add value to hash (as text representation) */
-        if (slot->tts_isnull[i])
-        {
-            bc_sha256_update(&ctx, (const uint8 *)"NULL", 4);
-        }
-        else
-        {
-            Datum val = slot->tts_values[i];
-            Oid typoutput;
-            bool typisvarlena;
-            char *str = NULL;
-            Datum out_val = val;
-            bool need_free_out_val = false;
-
-            getTypeOutputInfo(attr->atttypid, &typoutput, &typisvarlena);
-
-            /* Handle varlena types properly */
-            if (typisvarlena)
-            {
-                out_val = PointerGetDatum(PG_DETOAST_DATUM(val));
-                /* Only mark for freeing if detoasting actually created a new copy */
-                if (DatumGetPointer(out_val) != DatumGetPointer(val))
-                    need_free_out_val = true;
-            }
-
-            PG_TRY();
-            {
-                str = OidOutputFunctionCall(typoutput, out_val);
-                if (str != NULL)
-                {
-                    bc_sha256_update(&ctx, (const uint8 *)str, strlen(str));
-                    pfree(str);
-                    str = NULL; /* Mark as freed */
-                }
-                else
-                {
-                    /* Handle NULL return from OidOutputFunctionCall */
-                    bc_sha256_update(&ctx, (const uint8 *)"NULL", 4);
-                }
-            }
-            PG_CATCH();
-            {
-                /* Clean up in case of error */
-                if (str != NULL) 
-                {
-                    pfree(str);
-                    str = NULL;
-                }
-                if (need_free_out_val && DatumGetPointer(out_val) != NULL)
-                {
-                    pfree(DatumGetPointer(out_val));
-                    need_free_out_val = false;
-                }
-                
-                FlushErrorState();
-                elog(WARNING, "Skipping column %s: error converting to text", name);
-                bc_sha256_update(&ctx, (const uint8 *)"ERROR", 5);
-            }
-            PG_END_TRY();
-
-            /* Clean up detoasted value if needed */
-            if (need_free_out_val && DatumGetPointer(out_val) != NULL)
-            {
-                pfree(DatumGetPointer(out_val));
-            }
-        }
+        bc_sha256_update(&ctx, (uint8 *) VARDATA_ANY(prev_hash),
+                         VARSIZE_ANY_EXHDR(prev_hash));
     }
-    
-    /* Add timestamp */
+
+    // 2. Hash the WAL LSN
+    snprintf(lsnbuf, sizeof(lsnbuf), "%X/%X", (uint32) (tx_lsn >> 32), (uint32) tx_lsn);
+    bc_sha256_update(&ctx, (uint8 *) lsnbuf, strlen(lsnbuf));
+
+	// 3. Hash the timestamp
     char tsbuf[64];
     int tslen = snprintf(tsbuf, sizeof(tsbuf), "%lld", (long long int)ts);
     tsbuf[sizeof(tsbuf) - 1] = '\0'; // Ensure null-termination
-    
-    /* Update hash with timestamp */
-    elog(LOG, "ctx->bitcount: %lu", ctx.bitcount);
-    elog(LOG, "tsbuf: [%s] (len: %d)", tsbuf, tslen);
-    elog(LOG, "=== compute_curr_hash before hash update [%s] ===", tsbuf);
     bc_sha256_update(&ctx, (const uint8 *)tsbuf, tslen);
-    
-    /* Add previous hash (passed as parameter) */
-    if (prev_hash != NULL)
+
+
+    // 4. Hash user-defined columns from slot
+    int natts = slot->tts_tupleDescriptor->natts;
+    int user_natts = natts - NUM_BLOCKCHAIN_COLUMNS;
+    slot_getallattrs(slot);
+
+    for (int i = 0; i < user_natts; i++)
     {
-        int prev_hash_size = VARSIZE(prev_hash) - VARHDRSZ;
-        if (prev_hash_size > 0)
-        {
-            bc_sha256_update(&ctx, (const uint8 *)VARDATA(prev_hash), prev_hash_size);
-        }
+        if (slot->tts_isnull[i])
+            continue;
+
+        Oid typoutput;
+        bool typisvarlena;
+        Datum attr = slot->tts_values[i];
+        char *outputstr;
+
+        getTypeOutputInfo(TupleDescAttr(slot->tts_tupleDescriptor, i)->atttypid, &typoutput, &typisvarlena);
+        outputstr = OidOutputFunctionCall(typoutput, attr);
+        bc_sha256_update(&ctx, (uint8 *) outputstr, strlen(outputstr));
     }
-    
-    elog(LOG, "=== compute_curr_hash before finalize ===");
-    /* Finalize */
-    bc_sha256_final(&ctx, hash);
-    elog(LOG, "=== compute_curr_hash after finalize ===");
-    
-    /* Return as bytea */
-    bytea *res = (bytea *)palloc(VARHDRSZ + BC_SHA256_DIGEST_LENGTH);
-    SET_VARSIZE(res, VARHDRSZ + BC_SHA256_DIGEST_LENGTH);
-    memcpy(VARDATA(res), hash, BC_SHA256_DIGEST_LENGTH);
-    
-    elog(LOG, "=== compute_curr_hash END ===");
-    return res;
+
+    bc_sha256_final(&ctx, hash_output);
+
+    // Create a bytea to hold the hash result
+    result = (bytea *) palloc(VARHDRSZ + BC_SHA256_DIGEST_LENGTH);
+    SET_VARSIZE(result, VARHDRSZ + BC_SHA256_DIGEST_LENGTH);
+    memcpy(VARDATA(result), hash_output, BC_SHA256_DIGEST_LENGTH);
+
+    return result;
 }
+
+
+// Modified to accept prev_hash as parameter instead of computing it
+// bytea *
+// compute_curr_hash(Relation rel, TupleTableSlot *slot, TimestampTz ts, bytea *prev_hash, XLogRecPtr lsn)
+// {
+//     elog(LOG, "=== compute_curr_hash START ===");
+    
+//     bc_sha256_ctx ctx;
+//     TupleDesc desc = RelationGetDescr(rel);
+//     int natts = desc->natts;
+    
+//     /* Initialize context to zero first */
+//     memset(&ctx, 0, sizeof(bc_sha256_ctx)); 
+//     unsigned char hash[BC_SHA256_DIGEST_LENGTH];
+      
+//     slot_getallattrs(slot); // Ensure all attributes are fetched
+      
+//     /* Start SHA256 context */
+//     bc_sha256_init(&ctx);
+//     elog(LOG, "=== SHA Context initialized %p ===", (void *)&ctx);
+   
+//     /* Include user-visible attributes (skip prev_hash, curr_hash, ts) */
+//     for (int i = 0; i < natts; i++)
+//     {
+//         elog(LOG, "=== Processing attribute %d ===", i);
+
+//         Form_pg_attribute attr = TupleDescAttr(desc, i);
+//         if (attr->attisdropped || attr->attgenerated)
+//             continue;
+            
+//         const char *name = NameStr(attr->attname);
+//         if (strcmp(name, "__prev_hash") == 0 ||
+//             strcmp(name, "__curr_hash") == 0 ||
+//             strcmp(name, "__tx_timestamp") == 0)  
+//             continue;
+        
+//         /* Add value to hash (as text representation) */
+//         if (slot->tts_isnull[i])
+//         {
+//             bc_sha256_update(&ctx, (const uint8 *)"NULL", 4);
+//         }
+//         else
+//         {
+//             Datum val = slot->tts_values[i];
+//             Oid typoutput;
+//             bool typisvarlena;
+//             char *str = NULL;
+//             Datum out_val = val;
+//             bool need_free_out_val = false;
+
+//             getTypeOutputInfo(attr->atttypid, &typoutput, &typisvarlena);
+
+//             /* Handle varlena types properly */
+//             if (typisvarlena)
+//             {
+//                 out_val = PointerGetDatum(PG_DETOAST_DATUM(val));
+//                 /* Only mark for freeing if detoasting actually created a new copy */
+//                 if (DatumGetPointer(out_val) != DatumGetPointer(val))
+//                     need_free_out_val = true;
+//             }
+
+//             PG_TRY();
+//             {
+//                 str = OidOutputFunctionCall(typoutput, out_val);
+//                 if (str != NULL)
+//                 {
+//                     bc_sha256_update(&ctx, (const uint8 *)str, strlen(str));
+//                     pfree(str);
+//                     str = NULL; /* Mark as freed */
+//                 }
+//                 else
+//                 {
+//                     /* Handle NULL return from OidOutputFunctionCall */
+//                     bc_sha256_update(&ctx, (const uint8 *)"NULL", 4);
+//                 }
+//             }
+//             PG_CATCH();
+//             {
+//                 /* Clean up in case of error */
+//                 if (str != NULL) 
+//                 {
+//                     pfree(str);
+//                     str = NULL;
+//                 }
+//                 if (need_free_out_val && DatumGetPointer(out_val) != NULL)
+//                 {
+//                     pfree(DatumGetPointer(out_val));
+//                     need_free_out_val = false;
+//                 }
+                
+//                 FlushErrorState();
+//                 elog(WARNING, "Skipping column %s: error converting to text", name);
+//                 bc_sha256_update(&ctx, (const uint8 *)"ERROR", 5);
+//             }
+//             PG_END_TRY();
+
+//             /* Clean up detoasted value if needed */
+//             if (need_free_out_val && DatumGetPointer(out_val) != NULL)
+//             {
+//                 pfree(DatumGetPointer(out_val));
+//             }
+//         }
+//     }
+
+// 	/*Add WAL-LSN*/
+// 	char lsn_buf[64];
+// 	int lsn_len = snprintf(lsn_buf, sizeof(lsn_buf), "%X/%X", (uint32)(lsn >>32), (uint32)lsn);
+// 	lsn_buf[sizeof(lsn_buf) - 1] = '\0'; // Ensure null-termination
+
+// 	bc_sha256_update(&ctx, (const uint8 *)lsn_buf, lsn_len);
+    
+//     /* Add timestamp */
+//     char tsbuf[64];
+//     int tslen = snprintf(tsbuf, sizeof(tsbuf), "%lld", (long long int)ts);
+//     tsbuf[sizeof(tsbuf) - 1] = '\0'; // Ensure null-termination
+    
+//     /* Update hash with timestamp */
+//     elog(LOG, "ctx->bitcount: %lu", ctx.bitcount);
+//     elog(LOG, "tsbuf: [%s] (len: %d)", tsbuf, tslen);
+//     elog(LOG, "=== compute_curr_hash before hash update [%s] ===", tsbuf);
+//     bc_sha256_update(&ctx, (const uint8 *)tsbuf, tslen);
+    
+//     /* Add previous hash (passed as parameter) */
+//     if (prev_hash != NULL)
+//     {
+//         int prev_hash_size = VARSIZE(prev_hash) - VARHDRSZ;
+//         if (prev_hash_size > 0)
+//         {
+//             bc_sha256_update(&ctx, (const uint8 *)VARDATA(prev_hash), prev_hash_size);
+//         }
+//     }
+    
+//     elog(LOG, "=== compute_curr_hash before finalize ===");
+//     /* Finalize */
+//     bc_sha256_final(&ctx, hash);
+//     elog(LOG, "=== compute_curr_hash after finalize ===");
+    
+//     /* Return as bytea */
+//     bytea *res = (bytea *)palloc(VARHDRSZ + BC_SHA256_DIGEST_LENGTH);
+//     SET_VARSIZE(res, VARHDRSZ + BC_SHA256_DIGEST_LENGTH);
+//     memcpy(VARDATA(res), hash, BC_SHA256_DIGEST_LENGTH);
+    
+//     elog(LOG, "=== compute_curr_hash END ===");
+//     return res;
+// }

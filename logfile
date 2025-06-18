@@ -1326,3 +1326,29 @@
 2025-06-18 11:36:31.791 IST [414119] STATEMENT:  INSERT INTO t VALUES(4);
 2025-06-18 11:37:03.357 IST [413198] LOG:  checkpoint starting: time
 2025-06-18 11:37:11.508 IST [413198] LOG:  checkpoint complete: wrote 81 buffers (0.5%), wrote 3 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=8.135 s, sync=0.012 s, total=8.152 s; sync files=40, longest=0.007 s, average=0.001 s; distance=519 kB, estimate=519 kB; lsn=0/17E2B90, redo lsn=0/17E2B00
+2025-06-18 11:43:23.004 IST [413194] LOG:  received fast shutdown request
+2025-06-18 11:43:23.011 IST [413194] LOG:  aborting any active transactions
+2025-06-18 11:43:23.011 IST [414119] FATAL:  terminating connection due to administrator command
+2025-06-18 11:43:23.011 IST [413211] FATAL:  terminating connection due to administrator command
+2025-06-18 11:43:23.012 IST [413194] LOG:  background worker "logical replication launcher" (PID 413203) exited with exit code 1
+2025-06-18 11:43:23.013 IST [413198] LOG:  shutting down
+2025-06-18 11:43:23.014 IST [413198] LOG:  checkpoint starting: shutdown immediate
+2025-06-18 11:43:23.019 IST [413198] LOG:  checkpoint complete: wrote 0 buffers (0.0%), wrote 0 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.001 s, sync=0.001 s, total=0.006 s; sync files=0, longest=0.000 s, average=0.000 s; distance=0 kB, estimate=467 kB; lsn=0/17E2C40, redo lsn=0/17E2C40
+2025-06-18 11:43:23.028 IST [413194] LOG:  database system is shut down
+2025-06-18 14:13:42.087 IST [527315] LOG:  starting PostgreSQL 18beta1 on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 13.3.0-6ubuntu2~24.04) 13.3.0, 64-bit
+2025-06-18 14:13:42.088 IST [527315] LOG:  listening on IPv4 address "127.0.0.1", port 5432
+2025-06-18 14:13:42.097 IST [527315] LOG:  listening on Unix socket "/tmp/.s.PGSQL.5432"
+2025-06-18 14:13:42.108 IST [527321] LOG:  database system was shut down at 2025-06-18 14:13:30 IST
+2025-06-18 14:13:42.115 IST [527315] LOG:  database system is ready to accept connections
+2025-06-18 14:14:03.577 IST [528604] ERROR:  Could not find __curr_hash or _tx_lsn column
+2025-06-18 14:14:03.577 IST [528604] STATEMENT:  INSERT INTO a VALUES(1);
+2025-06-18 14:14:07.711 IST [528604] ERROR:  Could not find __curr_hash or _tx_lsn column
+2025-06-18 14:14:07.711 IST [528604] STATEMENT:  INSERT INTO a VALUES(2);
+2025-06-18 14:17:12.986 IST [527315] LOG:  received fast shutdown request
+2025-06-18 14:17:12.994 IST [527315] LOG:  aborting any active transactions
+2025-06-18 14:17:12.994 IST [528604] FATAL:  terminating connection due to administrator command
+2025-06-18 14:17:12.995 IST [527315] LOG:  background worker "logical replication launcher" (PID 527324) exited with exit code 1
+2025-06-18 14:17:12.997 IST [527319] LOG:  shutting down
+2025-06-18 14:17:12.999 IST [527319] LOG:  checkpoint starting: shutdown immediate
+2025-06-18 14:17:13.013 IST [527319] LOG:  checkpoint complete: wrote 74 buffers (0.5%), wrote 3 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.005 s, sync=0.004 s, total=0.016 s; sync files=37, longest=0.001 s, average=0.001 s; distance=473 kB, estimate=473 kB; lsn=0/17D7328, redo lsn=0/17D7328
+2025-06-18 14:17:13.025 IST [527315] LOG:  database system is shut down
