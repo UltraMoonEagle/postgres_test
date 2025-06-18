@@ -1025,41 +1025,41 @@ bc_sha224_final(bc_sha224_ctx *context, uint8 *digest)
 }
 
 
-bytea *
-compute_sha256_slot_hash(Relation rel, TupleTableSlot *slot, TimestampTz ts)
-{
-    bc_sha256_ctx ctx;
-    bc_sha256_init(&ctx);
+// bytea *
+// compute_sha256_slot_hash(Relation rel, TupleTableSlot *slot, TimestampTz ts)
+// {
+//     bc_sha256_ctx ctx;
+//     bc_sha256_init(&ctx);
 
-    TupleDesc desc = RelationGetDescr(rel);
-    int natts = desc->natts;
+//     TupleDesc desc = RelationGetDescr(rel);
+//     int natts = desc->natts;
 
-    for (int i = 0; i < natts; i++)
-    {
-        if (slot->tts_isnull[i])
-            continue;
+//     for (int i = 0; i < natts; i++)
+//     {
+//         if (slot->tts_isnull[i])
+//             continue;
 
-        // Skip system columns (e.g., __curr_hash, etc.)
-        const char *attname = NameStr(TupleDescAttr(desc, i)->attname);
-        if (strncmp(attname, "__", 2) == 0)
-            continue;
+//         // Skip system columns (e.g., __curr_hash, etc.)
+//         const char *attname = NameStr(TupleDescAttr(desc, i)->attname);
+//         if (strncmp(attname, "__", 2) == 0)
+//             continue;
 
-        Oid typoutput;
-        bool typisvarlena;
-        Datum datum = slot->tts_values[i];
+//         Oid typoutput;
+//         bool typisvarlena;
+//         Datum datum = slot->tts_values[i];
 
-        getTypeOutputInfo(TupleDescAttr(desc,i)->atttypid, &typoutput, &typisvarlena);
-        char *value_str = OidOutputFunctionCall(typoutput, datum);
+//         getTypeOutputInfo(TupleDescAttr(desc,i)->atttypid, &typoutput, &typisvarlena);
+//         char *value_str = OidOutputFunctionCall(typoutput, datum);
 
-        bc_sha256_update(&ctx, (uint8 *) value_str, strlen(value_str));
-    }
+//         bc_sha256_update(&ctx, (uint8 *) value_str, strlen(value_str));
+//     }
 
-    unsigned char digest[BC_SHA256_DIGEST_LENGTH];
-    bc_sha256_final(&ctx, digest);
+//     unsigned char digest[BC_SHA256_DIGEST_LENGTH];
+//     bc_sha256_final(&ctx, digest);
 
-    bytea *result = (bytea *) palloc(VARHDRSZ + BC_SHA256_DIGEST_LENGTH);
-    SET_VARSIZE(result, VARHDRSZ + BC_SHA256_DIGEST_LENGTH);
-    memcpy(VARDATA(result), digest, BC_SHA256_DIGEST_LENGTH);
+//     bytea *result = (bytea *) palloc(VARHDRSZ + BC_SHA256_DIGEST_LENGTH);
+//     SET_VARSIZE(result, VARHDRSZ + BC_SHA256_DIGEST_LENGTH);
+//     memcpy(VARDATA(result), digest, BC_SHA256_DIGEST_LENGTH);
 
-    return result;
-}
+//     return result;
+// }
