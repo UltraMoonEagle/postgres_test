@@ -2871,8 +2871,8 @@ blockchainam_tuple_insert(Relation relation, TupleTableSlot *slot,
         else if (strcmp(colname, "__is_latest") == 0)
         {
             elog(LOG, "Setting __is_latest for column %s at attno %d", colname, i);
-            virtualslot->tts_values[i] = BoolGetDatum(true);
-            virtualslot->tts_isnull[i] = false;
+            virtualslot->tts_values[i] = BoolGetDatum(false);
+            virtualslot->tts_isnull[i] = true;
         }
         else if (strcmp(colname, "__tx_timestamp") == 0)
         {
@@ -2939,6 +2939,11 @@ blockchainam_tuple_insert(Relation relation, TupleTableSlot *slot,
 			{
 				finalslot->tts_isnull[i] = true;
 			}
+		}
+		else if(strcmp(colname,"__is_latest") == 0)
+		{
+			finalslot->tts_values[i] = BoolGetDatum(true);
+			finalslot->tts_isnull[i] = false;
 		}
 	}
 	ExecStoreVirtualTuple(finalslot);
