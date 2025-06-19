@@ -2784,34 +2784,31 @@ blockchainam_tuple_insert(Relation relation, TupleTableSlot *slot,
     TimestampTz ts = GetCurrentTimestamp();
        
 	int base_attno = natts - NUM_BLOCKCHAIN_COLUMNS;
-
-    // Create a virtual slot with proper initialization
     TupleTableSlot *virtualslot = MakeSingleTupleTableSlot(tupdesc, &TTSOpsVirtual);
     ExecClearTuple(virtualslot);
 
 	bytea *prev_hash = NULL;
+	bytea *curr_hash = NULL;
 	XLogRecPtr prev_lsn = InvalidXLogRecPtr;
-	XLogRecPtr curr_lsn = XactLastRecEnd;
 
 	get_previous_hash_and_lsn(relation, &prev_hash, &prev_lsn);
-    bytea *curr_hash = compute_curr_hash(relation, slot, ts, prev_hash, curr_lsn);
-
-    bytea *prev_hash_copy = NULL;
-    bytea *curr_hash_copy = NULL;
-
-	if (prev_hash)
-    {
-        Size len = VARSIZE(prev_hash);
-        prev_hash_copy = (bytea *) palloc(len);
-        memcpy(prev_hash_copy, prev_hash, len);
-    }
     
-    if (curr_hash)
-    {
-        Size len = VARSIZE(curr_hash);
-        curr_hash_copy = (bytea *) palloc(len);
-        memcpy(curr_hash_copy, curr_hash, len);
-    }
+    // bytea *prev_hash_copy = NULL;
+    // bytea *curr_hash_copy = NULL;
+
+	// if (prev_hash)
+    // {
+    //     Size len = VARSIZE(prev_hash);
+    //     prev_hash_copy = (bytea *) palloc(len);
+    //     memcpy(prev_hash_copy, prev_hash, len);
+    // }
+    
+    // if (curr_hash)
+    // {
+    //     Size len = VARSIZE(curr_hash);
+    //     curr_hash_copy = (bytea *) palloc(len);
+    //     memcpy(curr_hash_copy, curr_hash, len);
+    // }
 
 	PG_TRY();
     {  
@@ -2828,6 +2825,7 @@ blockchainam_tuple_insert(Relation relation, TupleTableSlot *slot,
     // Make copies of hash values to ensure they persist
         
     // Initialize blockchain columns
+	Datum row_id = generate_uuid_datum();
     for (int i = base_attno; i < natts; i++)
     {
         Form_pg_attribute attr = TupleDescAttr(tupdesc, i);
@@ -2844,7 +2842,7 @@ blockchainam_tuple_insert(Relation relation, TupleTableSlot *slot,
         if (strcmp(colname, "__row_id") == 0)
         {
             elog(LOG, "Setting __row_id for column %s at attno %d", colname, i);
-            virtualslot->tts_values[i] = generate_uuid_datum();
+            virtualslot->tts_values[i] = row_id;
             virtualslot->tts_isnull[i] = false;
         }
         else if (strcmp(colname, "__tx_type") == 0)
@@ -2856,7 +2854,7 @@ blockchainam_tuple_insert(Relation relation, TupleTableSlot *slot,
         else if (strcmp(colname, "__tx_lsn") == 0)
         {
             elog(LOG, "Setting __tx_lsn for column %s at attno %d", colname, i);
-            virtualslot->tts_values[i] = LSNGetDatum(curr_lsn);
+            virtualslot->tts_values[i] = LSNGetDatum(InvalidXLogRecPtr);
             virtualslot->tts_isnull[i] = false;
         }
         else if (strcmp(colname, "__tx_origin") == 0)
@@ -2885,9 +2883,9 @@ blockchainam_tuple_insert(Relation relation, TupleTableSlot *slot,
         else if (strcmp(colname, "__prev_hash") == 0)
         {
             elog(LOG, "Setting __prev_hash for column %s at attno %d", colname, i);
-            if(prev_hash_copy)
+            if(prev_hash)
             {
-                virtualslot->tts_values[i] = PointerGetDatum(prev_hash_copy);
+                virtualslot->tts_values[i] = PointerGetDatum(prev_hash);
                 virtualslot->tts_isnull[i] = false;
             }
             else
@@ -2897,9 +2895,7 @@ blockchainam_tuple_insert(Relation relation, TupleTableSlot *slot,
         }
         else if (strcmp(colname, "__curr_hash") == 0)
         {
-            elog(LOG, "Setting __curr_hash for column %s at attno %d", colname, i);
-            virtualslot->tts_values[i] = PointerGetDatum(curr_hash_copy);
-            virtualslot->tts_isnull[i] = false;
+            virtualslot->tts_isnull[i] = true;
         }
         else
         {
@@ -2908,20 +2904,50 @@ blockchainam_tuple_insert(Relation relation, TupleTableSlot *slot,
         }
     }
     
-    // Mark the slot as valid and store the virtual tuple
     ExecStoreVirtualTuple(virtualslot);
-
-    // Insert the tuple
     heapam_tuple_insert(relation, virtualslot, cid, options, bistate);
+
+	CommandCounterIncrement();
+
+	XLogRecPtr real_lsn = XactLastRecEnd;
+	curr_hash = compute_curr_hash(relation, slot, ts, prev_hash, real_lsn);
+
+	TupleTableSlot *finalslot = MakeSingleTupleTableSlot(tupdesc, &TTSOpsVirtual);
+	ExecClearTuple(finalslot);
+
+	for(int i = 0; i < natts; i++)
+	{
+		finalslot->tts_values[i] = virtualslot->tts_values[i];
+		finalslot->tts_isnull[i] = virtualslot->tts_isnull[i];
+
+		Form_pg_attribute attr = TupleDescAttr(tupdesc, i);
+		const char *colname = NameStr(attr->attname);
+
+		if(strcmp(colname, "__tx_lsn") == 0)
+		{
+			finalslot->tts_values[i] = LSNGetDatum(real_lsn);
+			finalslot->tts_isnull[i] = false;
+		}
+		else if(strcmp(colname, "__curr_hash") == 0)
+		{
+			if(curr_hash)
+			{
+				finalslot->tts_values[i] = PointerGetDatum(curr_hash);
+				finalslot->tts_isnull[i] = false;
+			}
+			else
+			{
+				finalslot->tts_isnull[i] = true;
+			}
+		}
+	}
+	ExecStoreVirtualTuple(finalslot);
+	heapam_tuple_insert(relation, finalslot, cid, options, bistate);	
+	ExecDropSingleTupleTableSlot(finalslot);
 
  	}
 PG_CATCH();
     {
-        // Free allocated memory in case of error
-		if (prev_hash_copy)
-			pfree(prev_hash_copy);
-		if (curr_hash_copy)
-			pfree(curr_hash_copy);
         if (prev_hash)
             pfree(prev_hash);
         if (curr_hash)
@@ -2930,10 +2956,6 @@ PG_CATCH();
         PG_RE_THROW();
     }
     PG_END_TRY();
-		if (prev_hash_copy)
-			pfree(prev_hash_copy);
-		if (curr_hash_copy)
-			pfree(curr_hash_copy);
         if (prev_hash)
             pfree(prev_hash);
         if (curr_hash)
@@ -2941,6 +2963,7 @@ PG_CATCH();
 			
     // Clean up the virtual slot
     ExecDropSingleTupleTableSlot(virtualslot);
+	
 }
 
 static void
