@@ -63,6 +63,7 @@
 #include "commands/sequence.h"
 #include "commands/tablecmds.h"
 #include "commands/tablespace.h"
+#include "commands/blockchain_view.h"
 #include "commands/trigger.h"
 #include "commands/typecmds.h"
 #include "commands/user.h"
@@ -1430,7 +1431,17 @@ DefineRelation(CreateStmt *stmt, char relkind, Oid ownerId,
 	 * Clean up.  We keep lock on new relation (although it shouldn't be
 	 * visible to anyone else anyway, until commit).
 	 */
+
+	 if (stmt && stmt->accessMethod &&
+    	strcmp(stmt->accessMethod, "blockchain") == 0)
+	{
+		MaybeCreateBlockchainViews(stmt, relationId);
+	}
+
+	
 	relation_close(rel, NoLock);
+
+	
 
 	return address;
 }

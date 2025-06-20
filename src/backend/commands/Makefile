@@ -18,6 +18,7 @@ OBJS = \
 	amcmds.o \
 	analyze.o \
 	async.o \
+	blockchain_view.o \
 	cluster.o \
 	collationcmds.o \
 	comment.o \

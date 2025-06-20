@@ -41,6 +41,6 @@ static BlockchainColumnDef blockchain_system_columns[] = {
 	{"__tx_timestamp", TIMESTAMPTZOID, -1,-1}
 };
 
-#define NUM_BLOCKCHAIN_COLUMNS 8
+#define NUM_BLOCKCHAIN_COLUMNS 9
 
 #endif							/* BLOCKCHAINAM_H */
