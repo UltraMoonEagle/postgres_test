@@ -61,7 +61,7 @@ CreateBlockchainViewsInternal(const char *relname, Oid relnamespace)
                      "SELECT __row_id, __tx_version, __tx_type, __tx_origin, __is_latest, "
                      "__tx_lsn, encode(__prev_hash, 'hex') AS prev_hash, "
                      "encode(__curr_hash, 'hex') AS curr_hash, __tx_timestamp "
-                     "FROM %s.%s ORDER BY __tx_lsn",
+                     "FROM %s.%s WHERE __is_latest = true ORDER BY __tx_lsn",
                      quote_identifier(nspname), quote_identifier(relname),
                      quote_identifier(nspname), quote_identifier(relname));
 
@@ -113,6 +113,7 @@ CreateBlockchainViewsInternal(const char *relname, Oid relnamespace)
     pfree(verify_func.data);
 }
 
+
 // Hook into DefineRelation
 void
 MaybeCreateBlockchainViews(CreateStmt *stmt, Oid relid)
@@ -124,3 +125,79 @@ MaybeCreateBlockchainViews(CreateStmt *stmt, Oid relid)
         CreateBlockchainViewsInternal(relname, relnamespace);
     }
 }
+
+// Datum
+// verify_chain_internal(PG_FUNCTION_ARGS)
+// {
+//     Oid relid = PG_GETARG_OID(0);
+//     Datum row_id = PG_GETARG_DATUM(1);
+//     Relation rel = relation_open(relid, AccessShareLock);
+//     TupleDesc tupdesc = RelationGetDescr(rel);
+
+//     char *relname = RelationGetRelationName(rel);
+//     char *nspname = get_namespace_name(RelationGetNamespace(rel));
+
+//     StringInfoData query;
+//     initStringInfo(&query);
+//     appendStringInfo(&query,
+//         "SELECT * FROM %s.%s WHERE __row_id = $1 ORDER BY __tx_lsn",
+//         quote_identifier(nspname), quote_identifier(relname));
+
+//     SPI_connect();
+//     Oid argtypes[1] = {UUIDOID};
+//     Datum values[1] = {row_id};
+//     const char *nulls = " ";
+
+//     SPI_execute_with_args(query.data, 1, argtypes, values, &nulls, false, 0);
+
+//     if (SPI_processed == 0)
+//     {
+//         SPI_finish();
+//         relation_close(rel, AccessShareLock);
+//         PG_RETURN_TEXT_P(cstring_to_text("No such row_id found."));
+//     }
+
+//     bytea *expected_prev = NULL;
+//     bool valid = true;
+
+//     for (uint64 i = 0; i < SPI_processed; i++)
+//     {
+//         HeapTuple tuple = SPI_tuptable->vals[i];
+//         TupleTableSlot *slot = MakeSingleTupleTableSlot(tupdesc, &TTSOpsMinimalTuple);
+//         ExecStoreTuple(tuple, slot->tts_tuple, false);
+//         ExecMaterializeSlot(slot);
+
+//         Datum d_curr = slot_getattr(slot, SPI_fnumber(SPI_tuptable->tupdesc, "__curr_hash"), NULL);
+//         Datum d_prev = slot_getattr(slot, SPI_fnumber(SPI_tuptable->tupdesc, "__prev_hash"), NULL);
+//         Datum d_lsn  = slot_getattr(slot, SPI_fnumber(SPI_tuptable->tupdesc, "__tx_lsn"), NULL);
+//         Datum d_ts   = slot_getattr(slot, SPI_fnumber(SPI_tuptable->tupdesc, "__tx_timestamp"), NULL);
+
+//         bytea *curr_stored = (bytea *) DatumGetPointer(d_curr);
+//         bytea *prev_stored = (bytea *) DatumGetPointer(d_prev);
+//         XLogRecPtr lsn = DatumGetLSN(d_lsn);
+//         TimestampTz ts = DatumGetTimestampTz(d_ts);
+
+//         bytea *computed = compute_curr_hash(rel, slot, ts, expected_prev, lsn);
+
+//         if (VARSIZE(computed) != VARSIZE(curr_stored) ||
+//             memcmp(VARDATA(computed), VARDATA(curr_stored), VARSIZE_ANY_EXHDR(computed)) != 0)
+//         {
+//             valid = false;
+//             ExecDropSingleTupleTableSlot(slot);
+//             pfree(computed);
+//             break;
+//         }
+
+//         expected_prev = curr_stored;
+//         ExecDropSingleTupleTableSlot(slot);
+//         pfree(computed);
+//     }
+
+//     SPI_finish();
+//     relation_close(rel, AccessShareLock);
+
+//     if (valid)
+//         PG_RETURN_TEXT_P(cstring_to_text("Chain is valid."));
+//     else
+//         PG_RETURN_TEXT_P(cstring_to_text("Chain integrity failed!"));
+// }
