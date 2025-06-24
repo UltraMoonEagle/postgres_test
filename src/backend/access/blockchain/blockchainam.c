@@ -2983,11 +2983,7 @@ blockchainam_tuple_insert(Relation relation, TupleTableSlot *slot,
  	}
 PG_CATCH();
     {
-        if (prev_hash && prev_hash != insert_ctx.last_hash)
-            pfree(prev_hash);
-        if (curr_hash && curr_hash != insert_ctx.last_hash)
-            pfree(curr_hash);
-			ExecDropSingleTupleTableSlot(virtualslot);
+    	ExecDropSingleTupleTableSlot(virtualslot);
         PG_RE_THROW();
     }
     PG_END_TRY();
@@ -2996,11 +2992,12 @@ PG_CATCH();
     ExecDropSingleTupleTableSlot(virtualslot);
 
 	insert_ctx.relid = RelationGetRelid(relation);
-	insert_ctx.last_hash = curr_hash;
-	
-   	if (prev_hash && prev_hash != insert_ctx.last_hash)
-        pfree(prev_hash);
- 	
+	if (insert_ctx.last_hash)
+    pfree(insert_ctx.last_hash);  // okay here, this is permanent memory
+
+	insert_ctx.last_hash = (bytea *) MemoryContextAlloc(TopMemoryContext, VARSIZE(curr_hash));
+	memcpy(insert_ctx.last_hash, curr_hash, VARSIZE(curr_hash));
+
 }
 
 static void
@@ -3021,6 +3018,46 @@ blockchainam_tuple_insert_speculative(Relation rel, TupleTableSlot *slot,
          errmsg("INSERT ON CONFLICT not supported on blockchain table (from am)")));
 }
 
+// void
+// blockchainam_multi_insert(Relation relation,
+//                           TupleTableSlot **slots,
+//                           int ntuples,
+//                           CommandId cid,
+//                           int options,
+//                           BulkInsertState bistate)
+// {
+//     bytea *prev_hash = NULL;
+//     XLogRecPtr prev_lsn = InvalidXLogRecPtr;
+// 	elog(LOG, "INSIDE BLOCKCHAINAM MULTI INSERT");
+//     get_previous_hash_and_lsn(relation, &prev_hash, &prev_lsn);
+
+//     for (int i = 0; i < ntuples; i++)
+//     {
+//         bytea *curr_hash = NULL;
+//         XLogRecPtr curr_lsn = InvalidXLogRecPtr;
+
+// 		elog(LOG, "INSIDE BLOCKCHAINAM MULTI INSERT");
+
+// 		bytea *this_prev_hash = (bytea *) palloc(VARSIZE(prev_hash));
+//         memcpy(this_prev_hash, prev_hash, VARSIZE(prev_hash));
+
+//         blockchainam_tuple_insert_chained(relation, slots[i], cid, options, bistate,
+//                                           this_prev_hash, prev_lsn, &curr_hash, &curr_lsn);
+
+// 		pfree(this_prev_hash);
+
+// 		if(i > 0)
+// 			pfree(prev_hash);
+
+//         prev_hash = curr_hash;
+//         prev_lsn = curr_lsn;
+//     }
+
+// 	if(prev_hash)
+// 		pfree(prev_hash);
+
+// }
+
 void
 blockchainam_multi_insert(Relation relation,
                           TupleTableSlot **slots,
@@ -3029,9 +3066,19 @@ blockchainam_multi_insert(Relation relation,
                           int options,
                           BulkInsertState bistate)
 {
+    MemoryContext oldcontext;
+    MemoryContext insert_context;
+
+    // Create a context just for this multi-insert
+    insert_context = AllocSetContextCreate(CurrentMemoryContext,
+                                           "BlockchainMultiInsertContext",
+                                           ALLOCSET_DEFAULT_SIZES);
+    oldcontext = MemoryContextSwitchTo(insert_context);
+
     bytea *prev_hash = NULL;
     XLogRecPtr prev_lsn = InvalidXLogRecPtr;
-	elog(LOG, "INSIDE BLOCKCHAINAM MULTI INSERT");
+
+    elog(LOG, "INSIDE BLOCKCHAINAM MULTI INSERT");
     get_previous_hash_and_lsn(relation, &prev_hash, &prev_lsn);
 
     for (int i = 0; i < ntuples; i++)
@@ -3039,26 +3086,21 @@ blockchainam_multi_insert(Relation relation,
         bytea *curr_hash = NULL;
         XLogRecPtr curr_lsn = InvalidXLogRecPtr;
 
-		elog(LOG, "INSIDE BLOCKCHAINAM MULTI INSERT");
-
-		bytea *this_prev_hash = (bytea *) palloc(VARSIZE(prev_hash));
+        // Deep copy into the context to avoid shared ownership issues
+        bytea *this_prev_hash = (bytea *) MemoryContextAlloc(insert_context, VARSIZE(prev_hash));
         memcpy(this_prev_hash, prev_hash, VARSIZE(prev_hash));
 
         blockchainam_tuple_insert_chained(relation, slots[i], cid, options, bistate,
                                           this_prev_hash, prev_lsn, &curr_hash, &curr_lsn);
 
-		pfree(this_prev_hash);
-
-		if(i > 0)
-			pfree(prev_hash);
-
+        // Don't pfree anything; memory context will clean up
         prev_hash = curr_hash;
         prev_lsn = curr_lsn;
     }
 
-	if(prev_hash)
-		pfree(prev_hash);
-
+    // Switch back and free the temporary context
+    MemoryContextSwitchTo(oldcontext);
+    MemoryContextDelete(insert_context);
 }
 
 void
@@ -3292,7 +3334,10 @@ get_previous_hash_and_lsn(Relation relation, bytea **prev_hash_out, XLogRecPtr *
             if (prev_hash)
                 pfree(prev_hash);
 
-            prev_hash = (bytea *) DatumGetPointer(PG_DETOAST_DATUM_COPY(hash_val));
+			bytea *detoasted = DatumGetByteaPP(hash_val);
+			prev_hash = (bytea *) MemoryContextAlloc(CurrentMemoryContext, VARSIZE_ANY(detoasted));
+			memcpy(prev_hash, detoasted, VARSIZE_ANY(detoasted));
+            //prev_hash = (bytea *) DatumGetPointer(PG_DETOAST_DATUM_COPY(hash_val));
             prev_lsn = DatumGetLSN(lsn_val);
             found_hash = true;
         }
@@ -3302,7 +3347,7 @@ get_previous_hash_and_lsn(Relation relation, bytea **prev_hash_out, XLogRecPtr *
     // If nothing found, return zeroed values
     if (!found_hash)
     {
-        prev_hash = (bytea *) palloc(VARHDRSZ + BC_SHA256_DIGEST_LENGTH);
+        prev_hash = (bytea *) MemoryContextAlloc(CurrentMemoryContext, VARHDRSZ + BC_SHA256_DIGEST_LENGTH);
         SET_VARSIZE(prev_hash, VARHDRSZ + BC_SHA256_DIGEST_LENGTH);
         memset(VARDATA(prev_hash), 0, BC_SHA256_DIGEST_LENGTH);
 
@@ -3370,7 +3415,7 @@ compute_curr_hash(Relation rel, TupleTableSlot *slot, TimestampTz ts,  bytea *pr
     bc_sha256_final(&ctx, hash_output);
 
     // Create a bytea to hold the hash result
-    result = (bytea *) palloc(VARHDRSZ + BC_SHA256_DIGEST_LENGTH);
+    result = (bytea *) MemoryContextAlloc(CurrentMemoryContext, VARHDRSZ + BC_SHA256_DIGEST_LENGTH);
     SET_VARSIZE(result, VARHDRSZ + BC_SHA256_DIGEST_LENGTH);
     memcpy(VARDATA(result), hash_output, BC_SHA256_DIGEST_LENGTH);
 
