@@ -3031,7 +3031,7 @@ blockchainam_multi_insert(Relation relation,
 {
     bytea *prev_hash = NULL;
     XLogRecPtr prev_lsn = InvalidXLogRecPtr;
-
+	elog(LOG, "INSIDE BLOCKCHAINAM MULTI INSERT");
     get_previous_hash_and_lsn(relation, &prev_hash, &prev_lsn);
 
     for (int i = 0; i < ntuples; i++)
@@ -3041,17 +3041,25 @@ blockchainam_multi_insert(Relation relation,
 
 		elog(LOG, "INSIDE BLOCKCHAINAM MULTI INSERT");
 
-        blockchainam_tuple_insert_chained(relation, slots[i], cid, options, bistate,
-                                          prev_hash, prev_lsn, &curr_hash, &curr_lsn);
+		bytea *this_prev_hash = (bytea *) palloc(VARSIZE(prev_hash));
+        memcpy(this_prev_hash, prev_hash, VARSIZE(prev_hash));
 
-        if (prev_hash)
-            pfree(prev_hash);
+        blockchainam_tuple_insert_chained(relation, slots[i], cid, options, bistate,
+                                          this_prev_hash, prev_lsn, &curr_hash, &curr_lsn);
+
+		pfree(this_prev_hash);
+
+		if(i > 0)
+			pfree(prev_hash);
 
         prev_hash = curr_hash;
         prev_lsn = curr_lsn;
     }
-}
 
+	if(prev_hash)
+		pfree(prev_hash);
+
+}
 
 void
 blockchainam_tuple_insert_chained(Relation relation,
