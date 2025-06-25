@@ -6,123 +6,116 @@ Extend this for AUDITING purposes
 */
 
 
-// #include "postgres.h"
-// #include "tcop/utility.h"
-// #include "catalog/pg_class.h"
-// #include "catalog/namespace.h"
-// #include "utils/rel.h"
-// #include "utils/lsyscache.h"
-// #include "commands/defrem.h"
-// #include "access/htup_details.h"
-// #include "access/table.h"
-// #include "access/xact.h"
-// #include "nodes/parsenodes.h"
-// #include "commands/tablecmds.h"
-// #include "commands/dbcommands.h"
-// #include "catalog/objectaccess.h"
-// #include "miscadmin.h"
+#include "postgres.h"
+#include "tcop/utility.h"
+#include "catalog/pg_class.h"
+#include "catalog/pg_am_d.h"
+#include "catalog/namespace.h"
+#include "utils/rel.h"
+#include "utils/lsyscache.h"
+#include "commands/defrem.h"
+#include "access/htup_details.h"
+#include "access/relation.h"
+#include "access/table.h"
+#include "access/xact.h"
+#include "nodes/parsenodes.h"
+#include "commands/tablecmds.h"
+#include "commands/dbcommands.h"
+#include "catalog/objectaccess.h"
+#include "miscadmin.h"
 
-// static ProcessUtility_hook_type prev_ProcessUtility_hook = NULL;
+static ProcessUtility_hook_type prev_ProcessUtility_hook = NULL;
 
-// static void
-// blockchain_ProcessUtility(PlannedStmt *pstmt,
-//                           const char *queryString,
-//                           bool readOnlyTree,
-//                           ProcessUtilityContext context,
-//                           ParamListInfo params,
-//                           QueryEnvironment *queryEnv,
-//                           DestReceiver *dest,
-//                           QueryCompletion *qc)
-// {
-//     Node *parsetree = pstmt->utilityStmt;
+static void
+blockchain_ProcessUtility(PlannedStmt *pstmt,
+                          const char *queryString,
+                          bool readOnlyTree,
+                          ProcessUtilityContext context,
+                          ParamListInfo params,
+                          QueryEnvironment *queryEnv,
+                          DestReceiver *dest,
+                          QueryCompletion *qc)
+{
+    Node *parsetree = pstmt->utilityStmt;
+   
 
-//     if (IsA(parsetree, AlterTableStmt))
-//     {
-//         AlterTableStmt *stmt = (AlterTableStmt *) parsetree;
-//         RangeVar *rv = stmt->relation;
+    /* Check for TRUNCATE, ALTER TABLE, DROP, VACUUM, etc. */
+    if (IsA(parsetree, AlterTableStmt) ||
+        IsA(parsetree, TruncateStmt) ||
+        IsA(parsetree, DropStmt) ||
+        IsA(parsetree, ClusterStmt) ||
+        IsA(parsetree, ReindexStmt) ||
+        IsA(parsetree, VacuumStmt))
+    {
+        Oid relid = InvalidOid;
+        List *rels = NIL;
 
-//         Oid relid = RangeVarGetRelid(rv, AccessExclusiveLock, true);
-//         if (OidIsValid(relid))
-//         {
-//             Relation rel = table_open(relid, NoLock);
+        /* Extract relation list depending on statement type */
+        if (IsA(parsetree, AlterTableStmt))
+            rels = list_make1(((AlterTableStmt *) parsetree)->relation);
+        else if (IsA(parsetree, TruncateStmt))
+            rels = ((TruncateStmt *) parsetree)->relations;
+        else if (IsA(parsetree, DropStmt))
+            rels = ((DropStmt *) parsetree)->objects;
+        else if (IsA(parsetree, ClusterStmt))
+            rels = list_make1(((ClusterStmt *) parsetree)->relation);
+        else if (IsA(parsetree, ReindexStmt))
+            rels = list_make1(((ReindexStmt *) parsetree)->relation);
+        else if (IsA(parsetree, VacuumStmt))
+            rels = ((VacuumStmt *) parsetree)->rels;
 
-//             if (rel->rd_rel->relkind == RELKIND_BLOCKCHAIN_TABLE)
-//             {
-//                 ereport(ERROR,
-//                         (errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-//                          errmsg("ALTER not allowed on blockchain table \"%s\"", rv->relname),
-//                          errdetail("This operation is not supported for blockchain tables.")));
-//             }
+        ListCell *lc;
 
-//             table_close(rel, NoLock);
-//         }
-//     }
-//     else if (IsA(parsetree, TruncateStmt))
-//     {
-//         TruncateStmt *stmt = (TruncateStmt *) parsetree;
-//         ListCell *lc;
+        foreach(lc, rels)
+        {
+            RangeVar *rv = NULL;
+            if (IsA(lfirst(lc), RangeVar))
+                rv = (RangeVar *) lfirst(lc);
+            else if (IsA(lfirst(lc), ObjectWithArgs))  // DROP FUNCTION, etc.
+                continue;
 
-//         foreach(lc, stmt->relations)
-//         {
-//             RangeVar *rv = (RangeVar *) lfirst(lc);
-//             Oid relid = RangeVarGetRelid(rv, AccessExclusiveLock, true);
+            if (!rv)
+                continue;
 
-//             if (OidIsValid(relid))
-//             {
-//                 Relation rel = table_open(relid, NoLock);
+            relid = RangeVarGetRelid(rv, AccessShareLock, true);
+            if (!OidIsValid(relid))
+                continue;
 
-//                 if (rel->rd_rel->relkind == RELKIND_BLOCKCHAIN_TABLE)
-//                 {
-//                     ereport(ERROR,
-//                             (errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-//                              errmsg("TRUNCATE not allowed on blockchain table \"%s\"", rv->relname),
-//                              errdetail("This operation is not supported for blockchain tables.")));
-//                 }
+            Relation rel = try_relation_open(relid, AccessShareLock);
+            if (!rel)
+                continue;
 
-//                 table_close(rel, NoLock);
-//             }
-//         }
-//     }
-//     else if (IsA(parsetree, DropStmt))
-//     {
-//         DropStmt *stmt = (DropStmt *) parsetree;
-//         ListCell *lc;
+            if (rel->rd_rel->relam == BLOCKCHAIN_TABLE_AM_OID)
+            {
+                relation_close(rel, AccessShareLock);
+                ereport(ERROR,
+                        (errmsg("operation not allowed on blockchain table \"%s\"",
+                                rv->relname),
+                         errdetail("DDL operation blocked by immutability enforcement.")));
+            }
 
-//         foreach(lc, stmt->objects)
-//         {
-//             List *name = (List *) lfirst(lc);
-//             RangeVar *rv = makeRangeVarFromNameList(name);
+            relation_close(rel, AccessShareLock);
+        }
+    }
 
-//             Oid relid = RangeVarGetRelid(rv, AccessExclusiveLock, true);
-//             if (!OidIsValid(relid))
-//                 continue;
+    /* Pass through to next hook or standard handler */
+    if (prev_ProcessUtility_hook)
+        prev_ProcessUtility_hook(pstmt, queryString, readOnlyTree,
+                                 context, params, queryEnv, dest, qc);
+    else
+        standard_ProcessUtility(pstmt, queryString, readOnlyTree,
+                                context, params, queryEnv, dest, qc);
+}
 
-//             Relation rel = table_open(relid, NoLock);
+void
+blockchain_utility_hook_init(void)
+{
+    prev_ProcessUtility_hook = ProcessUtility_hook;
+    ProcessUtility_hook = blockchain_ProcessUtility;
+}
 
-//             if (rel->rd_rel->relkind == RELKIND_BLOCKCHAIN_TABLE)
-//             {
-//                 // Allow for now
-//                 ereport(WARNING,
-//                         (errmsg("DROP on blockchain table \"%s\" is temporarily allowed", rv->relname)));
-//             }
-
-//             table_close(rel, NoLock);
-//         }
-//     }
-
-//     /* Pass to next hook or standard */
-//     if (prev_ProcessUtility_hook)
-//         prev_ProcessUtility_hook(pstmt, queryString, readOnlyTree, context,
-//                                  params, queryEnv, dest, qc);
-//     else
-//         standard_ProcessUtility(pstmt, queryString, readOnlyTree, context,
-//                                 params, queryEnv, dest, qc);
-// }
-
-
-// void
-// _PG_init(void)
-// {
-//     prev_ProcessUtility_hook = ProcessUtility_hook;
-//     ProcessUtility_hook = blockchain_ProcessUtility;
-// }
+void
+blockchain_utility_hook_fini(void)
+{
+    ProcessUtility_hook = prev_ProcessUtility_hook;
+}

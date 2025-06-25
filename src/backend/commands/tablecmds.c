@@ -3908,6 +3908,7 @@ renameatt_check(Oid myrelid, Form_pg_class classform, bool recursing)
 		relkind != RELKIND_INDEX &&
 		relkind != RELKIND_PARTITIONED_INDEX &&
 		relkind != RELKIND_FOREIGN_TABLE &&
+		relkind != RELKIND_BLOCKCHAIN_TABLE &&
 		relkind != RELKIND_PARTITIONED_TABLE)
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),

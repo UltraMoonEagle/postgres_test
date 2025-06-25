@@ -12559,4 +12559,21 @@
   proargnames => '{pid,io_id,io_generation,state,operation,off,length,target,handle_data_len,raw_result,result,target_desc,f_sync,f_localmem,f_buffered}',
   prosrc => 'pg_get_aios' },
 
+# BLOCKCHAIN related functions
+
+{
+  oid => '9001',
+  descr => 'verify blockchain chain integrity for a table',
+  proname => 'verify_blockchain_chain',
+  prorettype => 'bool',
+  proargtypes => 'text',
+  prosrc => 'verify_blockchain_chain',
+  provolatile => 'v',
+  prolang => 'internal',
+  prosecdef => 'f',
+  proisstrict => 't',
+  proretset => 'f',
+}
+
+
 ]

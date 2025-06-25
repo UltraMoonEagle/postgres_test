@@ -28,6 +28,8 @@ typedef struct BlockchainColumnDef
 
 extern const TableAmRoutine *GetBlockchainTableAmRoutine(void);
 extern const TableAmRoutine blockchainam_methods;
+extern bytea *compute_curr_hash(Relation rel, TupleTableSlot *slot, TimestampTz ts, bytea *prev_hash, XLogRecPtr tx_lsn);
+
 
 static BlockchainColumnDef blockchain_system_columns[] = {
 	{"__row_id", UUIDOID, -1, -1},

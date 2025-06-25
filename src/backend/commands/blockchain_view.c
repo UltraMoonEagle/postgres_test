@@ -3,6 +3,10 @@
 
 #include "postgres.h"
 #include "access/relation.h"
+#include "access/table.h"
+#include "access/sdir.h"
+#include "access/heapam.h"
+#include "access/tableam.h"
 #include "commands/defrem.h"
 #include "commands/blockchain_view.h"
 #include "catalog/namespace.h"
@@ -17,9 +21,23 @@
 #include "utils/rel.h"
 #include "utils/uuid.h"
 #include "utils/ruleutils.h"
+#include "utils/varlena.h"
+#include "utils/snapmgr.h"
+#include "utils/pg_lsn.h"
+#include "utils/timestamp.h"
 #include "executor/spi.h"
+#include "executor/tuptable.h"
 #include "miscadmin.h"
 #include "tcop/utility.h"
+
+#include "blockchain/blockchain_hash.h"
+#include "blockchain/blockchainam.h"
+
+PG_MODULE_MAGIC;
+
+PG_FUNCTION_INFO_V1(verify_blockchain_chain);
+
+static bytea *recompute_hash(Relation rel, HeapTuple tuple, bytea *prev_hash, XLogRecPtr tx_lsn, TimestampTz ts);
 
 static void
 CreateBlockchainViewsInternal(const char *relname, Oid relnamespace)
@@ -31,7 +49,7 @@ CreateBlockchainViewsInternal(const char *relname, Oid relnamespace)
 
     const char *nspname = get_namespace_name(relnamespace);
 
-    RangeVar *target_rv = makeRangeVar(get_namespace_name(relnamespace), relname, -1);
+    RangeVar *target_rv = makeRangeVar(pstrdup(nspname), pstrdup(relname), -1);
     rel = relation_openrv(target_rv, AccessShareLock);
     tupdesc = RelationGetDescr(rel);
 
@@ -113,8 +131,6 @@ CreateBlockchainViewsInternal(const char *relname, Oid relnamespace)
     pfree(verify_func.data);
 }
 
-
-// Hook into DefineRelation
 void
 MaybeCreateBlockchainViews(CreateStmt *stmt, Oid relid)
 {
@@ -126,78 +142,202 @@ MaybeCreateBlockchainViews(CreateStmt *stmt, Oid relid)
     }
 }
 
-// Datum
-// verify_chain_internal(PG_FUNCTION_ARGS)
-// {
-//     Oid relid = PG_GETARG_OID(0);
-//     Datum row_id = PG_GETARG_DATUM(1);
-//     Relation rel = relation_open(relid, AccessShareLock);
-//     TupleDesc tupdesc = RelationGetDescr(rel);
+Datum
+verify_blockchain_chain(PG_FUNCTION_ARGS)
+{
+    text *relname_text = PG_GETARG_TEXT_P(0);
+    Relation rel;
+    TableScanDesc scan;
+    HeapTuple tuple;
+    TupleDesc tupdesc;
+    bytea *last_curr_hash = NULL;
+    bool valid = true;
 
-//     char *relname = RelationGetRelationName(rel);
-//     char *nspname = get_namespace_name(RelationGetNamespace(rel));
+    rel = table_openrv(makeRangeVarFromNameList(textToQualifiedNameList(relname_text)), AccessShareLock);
+    tupdesc = RelationGetDescr(rel);
+    scan = table_beginscan_strat(rel, GetActiveSnapshot(), 0, NULL, true, true);
 
-//     StringInfoData query;
-//     initStringInfo(&query);
-//     appendStringInfo(&query,
-//         "SELECT * FROM %s.%s WHERE __row_id = $1 ORDER BY __tx_lsn",
-//         quote_identifier(nspname), quote_identifier(relname));
+    while ((tuple = heap_getnext(scan, ForwardScanDirection)) != NULL)
+    {
+        bool isnull;
+    
+        Datum d_latest = heap_getattr(tuple, get_attnum(RelationGetRelid(rel), "__is_latest"), tupdesc, &isnull);
+        if (isnull || !DatumGetBool(d_latest))
+            continue; 
 
-//     SPI_connect();
-//     Oid argtypes[1] = {UUIDOID};
-//     Datum values[1] = {row_id};
-//     const char *nulls = " ";
+        Datum d_prev = heap_getattr(tuple, get_attnum(RelationGetRelid(rel), "__prev_hash"), tupdesc, &isnull);
+        if (isnull){
+            elog(ERROR, "__prev_hash column is NULL");
+            continue;
+        }
+        bytea *prev_hash_stored = DatumGetByteaP(d_prev);
 
-//     SPI_execute_with_args(query.data, 1, argtypes, values, &nulls, false, 0);
+        Datum d_curr = heap_getattr(tuple, get_attnum(RelationGetRelid(rel), "__curr_hash"), tupdesc, &isnull);
+        if (isnull)
+        {
+            elog(WARNING, "Skipping row with NULL __curr_hash");
+            continue;
+        }
+           
+        bytea *curr_hash_stored = DatumGetByteaP(d_curr);
 
-//     if (SPI_processed == 0)
-//     {
-//         SPI_finish();
-//         relation_close(rel, AccessShareLock);
-//         PG_RETURN_TEXT_P(cstring_to_text("No such row_id found."));
-//     }
+        Datum d_lsn = heap_getattr(tuple, get_attnum(RelationGetRelid(rel), "__tx_lsn"), tupdesc, &isnull);
+        if (isnull)
+            elog(ERROR, "__tx_lsn column is NULL");
+        XLogRecPtr tx_lsn = DatumGetLSN(d_lsn);
 
-//     bytea *expected_prev = NULL;
-//     bool valid = true;
+        Datum d_ts = heap_getattr(tuple, get_attnum(RelationGetRelid(rel), "__tx_timestamp"), tupdesc, &isnull);
+        if (isnull)
+            elog(ERROR, "__tx_timestamp column is NULL");
+        TimestampTz tx_ts = DatumGetTimestampTz(d_ts);
 
-//     for (uint64 i = 0; i < SPI_processed; i++)
-//     {
-//         HeapTuple tuple = SPI_tuptable->vals[i];
-//         TupleTableSlot *slot = MakeSingleTupleTableSlot(tupdesc, &TTSOpsMinimalTuple);
-//         ExecStoreTuple(tuple, slot->tts_tuple, false);
-//         ExecMaterializeSlot(slot);
+        bytea *recomputed = recompute_hash(rel, tuple, last_curr_hash, tx_lsn, tx_ts);
 
-//         Datum d_curr = slot_getattr(slot, SPI_fnumber(SPI_tuptable->tupdesc, "__curr_hash"), NULL);
-//         Datum d_prev = slot_getattr(slot, SPI_fnumber(SPI_tuptable->tupdesc, "__prev_hash"), NULL);
-//         Datum d_lsn  = slot_getattr(slot, SPI_fnumber(SPI_tuptable->tupdesc, "__tx_lsn"), NULL);
-//         Datum d_ts   = slot_getattr(slot, SPI_fnumber(SPI_tuptable->tupdesc, "__tx_timestamp"), NULL);
+        bool curr_mismatch = (VARSIZE_ANY_EXHDR(curr_hash_stored) != VARSIZE_ANY_EXHDR(recomputed) ||
+            memcmp(VARDATA_ANY(curr_hash_stored), VARDATA_ANY(recomputed), VARSIZE_ANY_EXHDR(curr_hash_stored)) != 0);
 
-//         bytea *curr_stored = (bytea *) DatumGetPointer(d_curr);
-//         bytea *prev_stored = (bytea *) DatumGetPointer(d_prev);
-//         XLogRecPtr lsn = DatumGetLSN(d_lsn);
-//         TimestampTz ts = DatumGetTimestampTz(d_ts);
+        bool prev_mismatch = 
+            (last_curr_hash && (VARSIZE_ANY_EXHDR(prev_hash_stored) != VARSIZE_ANY_EXHDR(last_curr_hash) ||
+             memcmp(VARDATA_ANY(prev_hash_stored), VARDATA_ANY(last_curr_hash), VARSIZE_ANY_EXHDR(prev_hash_stored)) != 0));
+        
+        if (curr_mismatch || prev_mismatch)
+        {
+        // Try to extract row ID (if available)
+        Datum d_id = heap_getattr(tuple, 1, tupdesc, &isnull); // Assuming user column is first
+        int id = isnull ? -1 : DatumGetInt32(d_id);
 
-//         bytea *computed = compute_curr_hash(rel, slot, ts, expected_prev, lsn);
+        char *stored_hex = DatumGetCString(DirectFunctionCall1(byteaout, PointerGetDatum(curr_hash_stored)));
+        char *recomputed_hex = DatumGetCString(DirectFunctionCall1(byteaout, PointerGetDatum(recomputed)));
 
-//         if (VARSIZE(computed) != VARSIZE(curr_stored) ||
-//             memcmp(VARDATA(computed), VARDATA(curr_stored), VARSIZE_ANY_EXHDR(computed)) != 0)
-//         {
-//             valid = false;
-//             ExecDropSingleTupleTableSlot(slot);
-//             pfree(computed);
-//             break;
-//         }
+        elog(WARNING, "Hash mismatch at id = %d", id);
+        elog(WARNING, "  stored curr_hash:     %s", stored_hex);
+        elog(WARNING, "  recomputed curr_hash: %s", recomputed_hex);
 
-//         expected_prev = curr_stored;
-//         ExecDropSingleTupleTableSlot(slot);
-//         pfree(computed);
-//     }
+        if (last_curr_hash)
+        {
+            char *last_hex = DatumGetCString(DirectFunctionCall1(byteaout, PointerGetDatum(last_curr_hash)));
+            char *prev_hex = DatumGetCString(DirectFunctionCall1(byteaout, PointerGetDatum(prev_hash_stored)));
+            elog(WARNING, "  prev_hash stored:     %s", prev_hex);
+            elog(WARNING, "  expected prev_hash:   %s", last_hex);
+            pfree(last_hex);
+            pfree(prev_hex);
+        }
 
-//     SPI_finish();
-//     relation_close(rel, AccessShareLock);
+        pfree(stored_hex);
+        pfree(recomputed_hex);
+        pfree(recomputed);
 
-//     if (valid)
-//         PG_RETURN_TEXT_P(cstring_to_text("Chain is valid."));
-//     else
-//         PG_RETURN_TEXT_P(cstring_to_text("Chain integrity failed!"));
-// }
+        valid = false;
+        break;
+        }
+
+        if (last_curr_hash)
+            pfree(last_curr_hash);
+        last_curr_hash = recomputed;
+        }
+
+    table_endscan(scan);
+    table_close(rel, AccessShareLock);
+    if (last_curr_hash)
+        pfree(last_curr_hash);
+
+    PG_RETURN_BOOL(valid);
+}
+
+static bytea *
+recompute_hash(Relation rel, HeapTuple tuple, bytea *prev_hash, XLogRecPtr tx_lsn, TimestampTz ts)
+{
+    TupleDesc tupdesc = RelationGetDescr(rel);
+    bc_sha256_ctx ctx;
+    uint8 hash_output[BC_SHA256_DIGEST_LENGTH];
+    bytea *result;
+    char lsnbuf[64];
+
+    memset(&ctx, 0, sizeof(ctx));
+    bc_sha256_init(&ctx);
+
+    elog(WARNING, "---- Begin Hash Input Debug ----");
+
+    /* 1. Previous hash */
+    if (prev_hash && VARSIZE_ANY_EXHDR(prev_hash) > 0)
+    {
+        elog(WARNING, "prev_hash: %s", DatumGetCString(DirectFunctionCall1(byteaout, PointerGetDatum(prev_hash))));
+        bc_sha256_update(&ctx, (uint8 *) VARDATA_ANY(prev_hash),
+                         VARSIZE_ANY_EXHDR(prev_hash));
+    }
+    else
+    {
+        elog(WARNING, "prev_hash: (null), using zero hash");
+        static const uint8 zero_hash[BC_SHA256_DIGEST_LENGTH] = {0};
+        bc_sha256_update(&ctx, zero_hash, BC_SHA256_DIGEST_LENGTH);
+    }
+
+    /* 2. LSN */
+    snprintf(lsnbuf, sizeof(lsnbuf), "%X/%X", (uint32)(tx_lsn >> 32), (uint32) tx_lsn);
+    elog(WARNING, "tx_lsn: %s", lsnbuf);
+    bc_sha256_update(&ctx, (const uint8 *) lsnbuf, strlen(lsnbuf));
+
+    /* 3. Timestamp (formatted as ISO 8601 UTC) */
+    char tsbuf[64];
+    struct pg_tm tm;
+    fsec_t fsec;
+    const char *tzn;
+
+    if (timestamp2tm(ts, NULL, &tm, &fsec, &tzn, NULL) == 0)
+    {
+        snprintf(tsbuf, sizeof(tsbuf),
+                 "%04d-%02d-%02dT%02d:%02d:%02d.%06dZ",
+                 tm.tm_year, tm.tm_mon, tm.tm_mday,
+                 tm.tm_hour, tm.tm_min, tm.tm_sec, (int) fsec);
+        elog(WARNING, "tx_timestamp: %s", tsbuf);
+        bc_sha256_update(&ctx, (const uint8 *) tsbuf, strlen(tsbuf));
+    }
+    else
+    {
+        elog(ERROR, "Failed to format timestamp for hashing");
+    }
+
+    /* 4. User-defined columns ONLY (exclude blockchain columns) */
+    int user_natts = tupdesc->natts - NUM_BLOCKCHAIN_COLUMNS;
+    for (int i = 0; i < user_natts; i++)
+    {
+        Form_pg_attribute attr = TupleDescAttr(tupdesc, i);
+        if (attr->attisdropped)
+            continue;
+
+        Datum val;
+        bool isnull;
+        val = heap_getattr(tuple, attr->attnum, tupdesc, &isnull);
+
+        if (!isnull)
+        {
+            Oid typoutput;
+            bool typisvarlena;
+            getTypeOutputInfo(attr->atttypid, &typoutput, &typisvarlena);
+            char *outputstr = OidOutputFunctionCall(typoutput, val);
+            elog(WARNING, "user column \"%s\": %s", NameStr(attr->attname), outputstr);
+            bc_sha256_update(&ctx, (const uint8 *) outputstr, strlen(outputstr));
+            pfree(outputstr);
+        }
+        else
+        {
+            elog(WARNING, "user column \"%s\": (null)", NameStr(attr->attname));
+        }
+    }
+
+    /* Finalize the hash */
+    bc_sha256_final(&ctx, hash_output);
+
+    /* Emit final hash for visibility */
+    char hexbuf[BC_SHA256_DIGEST_LENGTH * 2 + 1];
+    for (int i = 0; i < BC_SHA256_DIGEST_LENGTH; i++)
+        sprintf(&hexbuf[i * 2], "%02x", ((unsigned char *) hash_output)[i]);
+    elog(WARNING, "final recomputed hash: \\x%s", hexbuf);
+    elog(WARNING, "---- End Hash Input Debug ----");
+
+    result = (bytea *) MemoryContextAlloc(CurrentMemoryContext, VARHDRSZ + BC_SHA256_DIGEST_LENGTH);
+    SET_VARSIZE(result, VARHDRSZ + BC_SHA256_DIGEST_LENGTH);
+    memcpy(VARDATA(result), hash_output, BC_SHA256_DIGEST_LENGTH);
+
+    return result;
+}
