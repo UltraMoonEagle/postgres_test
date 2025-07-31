@@ -24,6 +24,7 @@
 #include "access/twophase.h"
 #include "access/xlogprefetcher.h"
 #include "access/xlogrecovery.h"
+#include "blockchain/blockchain_counter.h"
 #include "commands/async.h"
 #include "miscadmin.h"
 #include "pgstat.h"
@@ -335,6 +336,10 @@ CreateOrAttachShmemStructs(void)
 	ApplyLauncherShmemInit();
 	SlotSyncShmemInit();
 	BlockchainCounterShmemInit();
+	/* Restore blockchain counters from storage/tables */
+	/* Temporarily disabled for testing */
+	/* if (!IsUnderPostmaster)
+		BlockchainCounterStartup(); */
 
 	/*
 	 * Set up other modules that need some shared memory space

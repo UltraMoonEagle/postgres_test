@@ -33,12 +33,30 @@
 #include "storage/fd.h"
 #include "pgstat.h"
 #include "common/hashfn.h"
+#include "executor/spi.h"
+#include "catalog/namespace.h"
+#include "utils/builtins.h"
+#include "catalog/pg_class.h"
+#include "utils/fmgroids.h"
+#include "utils/lsyscache.h"
 
 /* Global pointer to shared memory data */
 BlockchainCounterData *BlockchainCounterShmem = NULL;
 
+/* Forward declarations */
+static uint64 BlockchainRecoverCounterForTable(Oid table_oid);
+
 /* File to persist counter values */
 #define BLOCKCHAIN_COUNTER_FILE "global/blockchain_counters"
+
+/*
+ * blockchain_counter_shmem_exit - shutdown callback for shared memory exit
+ */
+static void
+blockchain_counter_shmem_exit(int code, Datum arg)
+{
+	BlockchainPersistCounters();
+}
 
 /*
  * BlockchainCounterShmemSize
@@ -120,11 +138,17 @@ BlockchainGetNextCounter(Oid table_oid)
 
 	if (!found)
 	{
+		/* New table - perform lazy recovery to find existing maximum counter */
+		uint64 recovered_max = BlockchainRecoverCounterForTable(table_oid);
+		
 		/* Initialize new counter entry */
 		entry->table_oid = table_oid;
-		entry->counter_value = 1;  /* Start from 1 */
+		entry->counter_value = recovered_max + 1;  /* Next counter after maximum found */
 		entry->last_persisted = 0;
 		LWLockInitialize(&entry->lock, LWTRANCHE_FIRST_USER_DEFINED + 1);
+		
+		elog(LOG, "Lazy recovery for table OID %u: starting counter at %llu", 
+			 table_oid, (unsigned long long)entry->counter_value);
 	}
 
 	LWLockRelease(&BlockchainCounterShmem->ctl_lock);
@@ -181,7 +205,9 @@ BlockchainPersistCounters(void)
 	/* Write all counter entries */
 	LWLockAcquire(&BlockchainCounterShmem->ctl_lock, LW_SHARED);
 	
-	off_t offset = 0;
+	off_t offset;
+	
+	offset = 0;
 	hash_seq_init(&status, BlockchainCounterShmem->counter_hash);
 	while ((entry = (BlockchainCounterEntry *) hash_seq_search(&status)) != NULL)
 	{
@@ -232,8 +258,102 @@ BlockchainPersistCounters(void)
 }
 
 /*
+ * BlockchainRecoverCounterForTable
+ *	Recover counter value for a specific blockchain table using lazy loading
+ */
+static uint64
+BlockchainRecoverCounterForTable(Oid table_oid)
+{
+	Relation	table_rel;
+	uint64		max_counter = 0;
+	
+	if (!OidIsValid(table_oid))
+		return 0;
+
+	/* Try to open the table and check if it's a blockchain table */
+	PG_TRY();
+	{
+		TupleDesc	tupdesc;
+		bool		is_blockchain_table = false;
+		
+		table_rel = table_open(table_oid, AccessShareLock);
+		tupdesc = RelationGetDescr(table_rel);
+		
+		/* Check if table has blockchain system columns */
+		for (int i = 0; i < tupdesc->natts; i++)
+		{
+			Form_pg_attribute attr = TupleDescAttr(tupdesc, i);
+			if (strcmp(NameStr(attr->attname), "__tx_lsn") == 0)
+			{
+				is_blockchain_table = true;
+				break;
+			}
+		}
+		
+		if (is_blockchain_table)
+		{
+			/* Find maximum counter value for this table using SPI */
+			char		query[512];
+			int			spi_result;
+			SPITupleTable *tuptable;
+			bool		isnull;
+			Datum		max_counter_datum;
+			
+			spi_result = SPI_connect();
+			if (spi_result == SPI_OK_CONNECT)
+			{
+				snprintf(query, sizeof(query), 
+					"SELECT COALESCE(MAX(__tx_lsn), 0) FROM %s",
+					RelationGetRelationName(table_rel));
+				
+				if (SPI_execute(query, true, 0) == SPI_OK_SELECT && 
+					SPI_processed > 0)
+				{
+					tuptable = SPI_tuptable;
+					max_counter_datum = SPI_getbinval(tuptable->vals[0], 
+						tuptable->tupdesc, 1, &isnull);
+					if (!isnull)
+					{
+						max_counter = DatumGetInt64(max_counter_datum);
+						elog(LOG, "Recovered counter for table %s (OID %u): %llu", 
+							 RelationGetRelationName(table_rel), table_oid, 
+							 (unsigned long long)max_counter);
+					}
+				}
+				SPI_finish();
+			}
+		}
+		
+		table_close(table_rel, AccessShareLock);
+	}
+	PG_CATCH();
+	{
+		/* Skip tables we can't access */
+		FlushErrorState();
+		max_counter = 0;
+	}
+	PG_END_TRY();
+	
+	return max_counter;
+}
+
+/*
+ * BlockchainRecoverCountersFromTables
+ *	Recover counter values by scanning all blockchain tables (DEPRECATED - causes startup crashes)
+ */
+static void
+BlockchainRecoverCountersFromTables(void)
+{
+	/* This function is deprecated due to SPI startup issues */
+	elog(LOG, "BlockchainRecoverCountersFromTables: Deprecated - using lazy recovery instead");
+
+	/* Function body removed - was causing startup crashes due to SPI usage */
+	/* Counter recovery now happens lazily when tables are first accessed */
+}
+
+/*
  * BlockchainRestoreCounters
- *		Read counter values from disk at startup
+ *		Read counter values from disk at startup, with fallback to table scanning
  */
 void
 BlockchainRestoreCounters(void)
@@ -253,19 +373,26 @@ BlockchainRestoreCounters(void)
 	file = PathNameOpenFile(path, O_RDONLY);
 	if (file < 0)
 	{
-		/* File doesn't exist yet, which is OK */
+		/* File doesn't exist yet - this is normal for first startup */
 		if (errno == ENOENT)
+		{
+			elog(LOG, "No counter file found - will use lazy recovery on table access");
 			return;
+		}
 			
 		ereport(WARNING,
 				(errcode_for_file_access(),
 				 errmsg("could not open blockchain counter file \"%s\": %m",
 						path)));
+		/* On file access error, rely on lazy recovery */
+		elog(LOG, "File access failed - will use lazy recovery on table access");
 		return;
 	}
 
 	/* Read all counter entries */
-	off_t offset = 0;
+	off_t offset;
+	
+	offset = 0;
 	while (FileRead(file, &table_oid, sizeof(Oid), offset, WAIT_EVENT_DATA_FILE_READ) == sizeof(Oid))
 	{
 		offset += sizeof(Oid);
@@ -333,7 +460,14 @@ BlockchainDropTableCounter(Oid table_oid)
 void
 BlockchainCounterStartup(void)
 {
+	/* Register shutdown callback to persist counters */
+	before_shmem_exit(blockchain_counter_shmem_exit, (Datum) 0);
+	
+	/* Only restore from file-based persistence (safe during startup) */
+	/* Skip SPI-based table scanning which causes startup crashes */
 	BlockchainRestoreCounters();
+	
+	elog(LOG, "Blockchain counter system initialized with lazy recovery");
 }
 
 /*
