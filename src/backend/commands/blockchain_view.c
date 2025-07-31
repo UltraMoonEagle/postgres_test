@@ -133,12 +133,15 @@ CreateBlockchainViewsInternal(const char *relname, Oid relnamespace)
 void
 MaybeCreateBlockchainViews(CreateStmt *stmt, Oid relid)
 {
+    /* Automatic view and function creation disabled - use system functions instead */
+    /*
     if (stmt->accessMethod && strcmp(stmt->accessMethod, "blockchain") == 0)
     {
         const char *relname = stmt->relation->relname;
         Oid relnamespace = RangeVarGetCreationNamespace(stmt->relation);
         CreateBlockchainViewsInternal(relname, relnamespace);
     }
+    */
 }
 
 Datum

@@ -3179,6 +3179,18 @@ expandTupleDesc(TupleDesc tupdesc, Alias *eref, int count, int offset,
 			continue;
 		}
 
+		/*
+		 * Skip blockchain system columns (starting with '__') from SELECT * queries
+		 * These columns are hidden from regular user queries but can still be accessed
+		 * explicitly or through special functions.
+		 */
+		if (strncmp(NameStr(attr->attname), "__", 2) == 0)
+		{
+			if (aliascell)
+				aliascell = lnext(eref->colnames, aliascell);
+			continue;
+		}
+
 		if (colnames)
 		{
 			char	   *label;
@@ -3247,27 +3259,39 @@ expandNSItemVars(ParseState *pstate, ParseNamespaceItem *nsitem,
 		}
 		else if (colname[0])
 		{
-			Var		   *var;
+			/*
+			 * Skip blockchain system columns (starting with '__') from SELECT * queries
+			 * These columns are hidden from regular user queries but can still be accessed
+			 * explicitly or through special functions.
+			 */
+			if (strncmp(colname, "__", 2) == 0)
+			{
+				/* skip blockchain system columns */
+			}
+			else
+			{
+				Var		   *var;
 
-			Assert(nscol->p_varno > 0);
-			var = makeVar(nscol->p_varno,
-						  nscol->p_varattno,
-						  nscol->p_vartype,
-						  nscol->p_vartypmod,
-						  nscol->p_varcollid,
-						  sublevels_up);
-			/* makeVar doesn't offer parameters for these, so set by hand: */
-			var->varreturningtype = nscol->p_varreturningtype;
-			var->varnosyn = nscol->p_varnosyn;
-			var->varattnosyn = nscol->p_varattnosyn;
-			var->location = location;
+				Assert(nscol->p_varno > 0);
+				var = makeVar(nscol->p_varno,
+							  nscol->p_varattno,
+							  nscol->p_vartype,
+							  nscol->p_vartypmod,
+							  nscol->p_varcollid,
+							  sublevels_up);
+				/* makeVar doesn't offer parameters for these, so set by hand: */
+				var->varreturningtype = nscol->p_varreturningtype;
+				var->varnosyn = nscol->p_varnosyn;
+				var->varattnosyn = nscol->p_varattnosyn;
+				var->location = location;
 
-			/* ... and update varnullingrels */
-			markNullableIfNeeded(pstate, var);
+				/* ... and update varnullingrels */
+				markNullableIfNeeded(pstate, var);
 
-			result = lappend(result, var);
-			if (colnames)
-				*colnames = lappend(*colnames, colnameval);
+				result = lappend(result, var);
+				if (colnames)
+					*colnames = lappend(*colnames, colnameval);
+			}
 		}
 		else
 		{

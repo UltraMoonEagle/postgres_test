@@ -1435,7 +1435,8 @@ DefineRelation(CreateStmt *stmt, char relkind, Oid ownerId,
 	 if (stmt && stmt->accessMethod &&
     	strcmp(stmt->accessMethod, "blockchain") == 0)
 	{
-		MaybeCreateBlockchainViews(stmt, relationId);
+		/* Removed automatic view creation - views are now accessed via functions */
+		/* MaybeCreateBlockchainViews(stmt, relationId); */
 	}
 
 	
@@ -3888,6 +3889,7 @@ static void
 renameatt_check(Oid myrelid, Form_pg_class classform, bool recursing)
 {
 	char		relkind = classform->relkind;
+	
 
 	if (classform->reloftype && !recursing)
 		ereport(ERROR,
@@ -3915,6 +3917,16 @@ renameatt_check(Oid myrelid, Form_pg_class classform, bool recursing)
 				 errmsg("cannot rename columns of relation \"%s\"",
 						NameStr(classform->relname)),
 				 errdetail_relkind_not_supported(relkind)));
+
+	/*
+	 * Blockchain tables are immutable - no column renames allowed
+	 */
+	if (relkind == RELKIND_BLOCKCHAIN_TABLE)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot rename columns of blockchain table \"%s\"",
+						NameStr(classform->relname)),
+				 errdetail("Blockchain tables are immutable and do not support column renaming.")));
 
 	/*
 	 * permissions checking.  only the owner of a class can change its schema.
