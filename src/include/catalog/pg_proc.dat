@@ -12573,7 +12573,24 @@
   prosecdef => 'f',
   proisstrict => 't',
   proretset => 'f',
+},
+
+# blockchain function for anchoring query hash
+{
+    oid => 9002,
+    descr => 'Anchor query result into blockchain table',
+    proname => 'anchor_bc_query',
+    prolang => 'internal',
+    procost => '1',
+    prorows => '0',
+    provariadic => '0',
+    provolatile => 'v',
+    proparallel => 'u',
+    prorettype => 'void',
+    proargtypes => 'text text',
+    prosrc => 'anchor_bc_query'
 }
+
 
 
 ]

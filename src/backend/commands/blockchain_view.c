@@ -33,8 +33,6 @@
 #include "blockchain/blockchain_hash.h"
 #include "blockchain/blockchainam.h"
 
-PG_MODULE_MAGIC;
-
 PG_FUNCTION_INFO_V1(verify_blockchain_chain);
 
 static bytea *recompute_hash(Relation rel, HeapTuple tuple, bytea *prev_hash, XLogRecPtr tx_lsn, TimestampTz ts);

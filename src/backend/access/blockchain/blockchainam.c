@@ -3181,6 +3181,7 @@ blockchainam_tuple_insert_chained(Relation relation,
         Form_pg_attribute attr = TupleDescAttr(tupdesc, i);
         const char *colname = NameStr(attr->attname);
 
+		//Global counter
         if (strcmp(colname, "__tx_lsn") == 0)
         {
             finalslot->tts_values[i] = LSNGetDatum(real_lsn);
@@ -3255,6 +3256,7 @@ int get_attnum_by_name(TupleDesc tupdesc, const char *name)
 	return -1;
 }
 
+// Change this to accomodate global counter instead of LSN
 void
 get_previous_hash_and_lsn(Relation relation, bytea **prev_hash_out, XLogRecPtr *prev_lsn_out)
 {
@@ -3330,76 +3332,6 @@ get_previous_hash_and_lsn(Relation relation, bytea **prev_hash_out, XLogRecPtr *
 }
 
 
-// bytea *
-// compute_curr_hash(Relation rel, TupleTableSlot *slot, TimestampTz ts,  bytea *prev_hash, XLogRecPtr tx_lsn)
-// {
-//     bc_sha256_ctx ctx;
-//     bytea hash_output[BC_SHA256_DIGEST_LENGTH];
-//     bytea *result;
-//     char lsnbuf[64];
-
-//     memset(&ctx, 0, sizeof(bc_sha256_ctx));
-//     bc_sha256_init(&ctx);
-
-//     // 1. Hash previous hash
-//     if (prev_hash && VARSIZE_ANY_EXHDR(prev_hash) > 0)
-//     {
-//         bc_sha256_update(&ctx, (uint8 *) VARDATA_ANY(prev_hash),
-//                          VARSIZE_ANY_EXHDR(prev_hash));
-//     }
-
-//     // 2. Hash the WAL LSN
-//     snprintf(lsnbuf, sizeof(lsnbuf), "%X/%X", (uint32) (tx_lsn >> 32), (uint32) tx_lsn);
-//     bc_sha256_update(&ctx, (uint8 *) lsnbuf, strlen(lsnbuf));
-
-// 	// 3. Hash the timestamp
-// 	const char *tstext = timestamptz_to_str(ts);
-// 	elog(WARNING, "tx_timestamp: %s", tstext);  // optional for debug
-// 	bc_sha256_update(&ctx, (const uint8 *) tstext, strlen(tstext));
-
-
-//     // 4. Hash user-defined columns from slot
-//     int natts = slot->tts_tupleDescriptor->natts;
-//     int user_natts = natts - NUM_BLOCKCHAIN_COLUMNS;
-//     slot_getallattrs(slot);
-
-//     for (int i = 0; i < user_natts; i++)
-//     {
-//         if (slot->tts_isnull[i])
-//             continue;
-
-//         Oid typoutput;
-//         bool typisvarlena;
-//         Datum attr = slot->tts_values[i];
-//         char *outputstr;
-
-//         getTypeOutputInfo(TupleDescAttr(slot->tts_tupleDescriptor, i)->atttypid, &typoutput, &typisvarlena);
-//         outputstr = OidOutputFunctionCall(typoutput, attr);
-//         bc_sha256_update(&ctx, (uint8 *) outputstr, strlen(outputstr));
-//     }
-
-//     bc_sha256_final(&ctx, hash_output);
-
-//     // Create a bytea to hold the hash result
-//     result = (bytea *) MemoryContextAlloc(CurrentMemoryContext, VARHDRSZ + BC_SHA256_DIGEST_LENGTH);
-//     SET_VARSIZE(result, VARHDRSZ + BC_SHA256_DIGEST_LENGTH);
-//     memcpy(VARDATA(result), hash_output, BC_SHA256_DIGEST_LENGTH);
-
-//     return result;
-// }
-
-// void
-// _PG_init(void)
-// {
-//     blockchain_utility_hook_init();
-// }
-
-// void
-// _PG_fini(void)
-// {
-//     blockchain_utility_hook_fini();
-// }
-
 bytea *
 compute_curr_hash(Relation rel, TupleTableSlot *slot, TimestampTz ts,  bytea *prev_hash, XLogRecPtr tx_lsn)
 {
@@ -3447,7 +3379,7 @@ compute_curr_hash(Relation rel, TupleTableSlot *slot, TimestampTz ts,  bytea *pr
     }
     else
     {
-        elog(ERROR, "Failed to format timestamp for hashing");
+        elog(ERROR, "Failed to format timestamp for hashing");\
     }
 
     // 4. Hash user-defined columns from slot

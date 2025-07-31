@@ -10,7 +10,7 @@
  *
  *-------------------------------------------------------------------------
  */
-#ifndef BLOCKCHAINAM_H
+#ifndef BLOCKCHAINAM_
 #define BLOCKCHAINAM_H
 
 #include "access/tableam.h"

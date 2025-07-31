@@ -1,0 +1,132 @@
+2025-06-26 11:31:32.361 IST [1546534] LOG:  starting PostgreSQL 18beta1 on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 13.3.0-6ubuntu2~24.04) 13.3.0, 64-bit
+2025-06-26 11:31:32.362 IST [1546534] LOG:  listening on IPv4 address "127.0.0.1", port 5432
+2025-06-26 11:31:32.363 IST [1546534] LOG:  listening on Unix socket "/tmp/.s.PGSQL.5432"
+2025-06-26 11:31:32.366 IST [1546570] LOG:  database system was shut down at 2025-06-26 11:31:18 IST
+2025-06-26 11:31:32.369 IST [1546534] LOG:  database system is ready to accept connections
+2025-06-26 11:32:14.313 IST [1554712] ERROR:  column "e" does not exist at character 24
+2025-06-26 11:32:14.313 IST [1554712] STATEMENT:  INSERT INTO eee VALUES(e),(f),(g)
+	;
+2025-06-26 11:32:22.458 IST [1554712] LOG:  No previous hash or lsn found, initializing to zero
+2025-06-26 11:32:22.458 IST [1554712] STATEMENT:  INSERT INTO eee VALUES(1),(2),(3);
+2025-06-26 11:32:22.458 IST [1554712] LOG:  === get_previous_hash_and_lsn END ===
+2025-06-26 11:32:22.458 IST [1554712] STATEMENT:  INSERT INTO eee VALUES(1),(2),(3);
+2025-06-26 11:32:22.458 IST [1554712] WARNING:  ==== BEGIN compute_curr_hash DEBUG ====
+2025-06-26 11:32:22.458 IST [1554712] WARNING:  COMPUTE: prev_hash: \x0000000000000000000000000000000000000000000000000000000000000000
+2025-06-26 11:32:22.458 IST [1554712] WARNING:  COMPUTE: tx_lsn: 0/1795980
+2025-06-26 11:32:22.458 IST [1554712] WARNING:  tx_timestamp: 2025-06-26T06:02:22.458718Z
+2025-06-26 11:32:22.458 IST [1554712] WARNING:  COMPUTE: Total attributes: 10, User attributes: 1, NUM_BLOCKCHAIN_COLUMNS: 9
+2025-06-26 11:32:22.458 IST [1554712] WARNING:  COMPUTE: user column 0 ("id"): 1
+2025-06-26 11:32:22.458 IST [1554712] WARNING:  COMPUTE: final computed hash: \x96745c2d29832db28e49f3aff41efeee780d66de220016c25ff5506454e1d425
+2025-06-26 11:32:22.458 IST [1554712] WARNING:  ==== END compute_curr_hash DEBUG ====
+2025-06-26 11:32:22.458 IST [1554712] WARNING:  ==== BEGIN compute_curr_hash DEBUG ====
+2025-06-26 11:32:22.458 IST [1554712] WARNING:  COMPUTE: prev_hash: \x96745c2d29832db28e49f3aff41efeee780d66de220016c25ff5506454e1d425
+2025-06-26 11:32:22.458 IST [1554712] WARNING:  COMPUTE: tx_lsn: 0/1795AD0
+2025-06-26 11:32:22.458 IST [1554712] WARNING:  tx_timestamp: 2025-06-26T06:02:22.458908Z
+2025-06-26 11:32:22.458 IST [1554712] WARNING:  COMPUTE: Total attributes: 10, User attributes: 1, NUM_BLOCKCHAIN_COLUMNS: 9
+2025-06-26 11:32:22.458 IST [1554712] WARNING:  COMPUTE: user column 0 ("id"): 2
+2025-06-26 11:32:22.458 IST [1554712] WARNING:  COMPUTE: final computed hash: \xc0b9d5c1e66af3906135f45766d5cdc21f6d0504ec85ecda1f042fbfa84ecb07
+2025-06-26 11:32:22.458 IST [1554712] WARNING:  ==== END compute_curr_hash DEBUG ====
+2025-06-26 11:32:22.458 IST [1554712] WARNING:  ==== BEGIN compute_curr_hash DEBUG ====
+2025-06-26 11:32:22.458 IST [1554712] WARNING:  COMPUTE: prev_hash: \xc0b9d5c1e66af3906135f45766d5cdc21f6d0504ec85ecda1f042fbfa84ecb07
+2025-06-26 11:32:22.458 IST [1554712] WARNING:  COMPUTE: tx_lsn: 0/1795C20
+2025-06-26 11:32:22.458 IST [1554712] WARNING:  tx_timestamp: 2025-06-26T06:02:22.458964Z
+2025-06-26 11:32:22.458 IST [1554712] WARNING:  COMPUTE: Total attributes: 10, User attributes: 1, NUM_BLOCKCHAIN_COLUMNS: 9
+2025-06-26 11:32:22.458 IST [1554712] WARNING:  COMPUTE: user column 0 ("id"): 3
+2025-06-26 11:32:22.459 IST [1554712] WARNING:  COMPUTE: final computed hash: \x2b1f3e10fc4154c5634058b2b6a4cd634147236c9a4d6f536790b7d873cfee76
+2025-06-26 11:32:22.459 IST [1554712] WARNING:  ==== END compute_curr_hash DEBUG ====
+2025-06-26 11:32:28.500 IST [1554712] ERROR:  relation "a" does not exist at character 15
+2025-06-26 11:32:28.500 IST [1554712] STATEMENT:  SELECT * FROM a;
+2025-06-26 11:34:50.497 IST [1554712] WARNING:  ---- Begin Hash Input Debug ----
+2025-06-26 11:34:50.497 IST [1554712] WARNING:  prev_hash: (null), using zero hash
+2025-06-26 11:34:50.497 IST [1554712] WARNING:  tx_lsn: 0/1795980
+2025-06-26 11:34:50.497 IST [1554712] WARNING:  tx_timestamp: 2025-06-26T06:02:22.458718Z
+2025-06-26 11:34:50.497 IST [1554712] WARNING:  user column "id": 1
+2025-06-26 11:34:50.497 IST [1554712] WARNING:  final recomputed hash: \x96745c2d29832db28e49f3aff41efeee780d66de220016c25ff5506454e1d425
+2025-06-26 11:34:50.497 IST [1554712] WARNING:  ---- End Hash Input Debug ----
+2025-06-26 11:34:50.497 IST [1554712] WARNING:  ---- Begin Hash Input Debug ----
+2025-06-26 11:34:50.497 IST [1554712] WARNING:  prev_hash: \x96745c2d29832db28e49f3aff41efeee780d66de220016c25ff5506454e1d425
+2025-06-26 11:34:50.497 IST [1554712] WARNING:  tx_lsn: 0/1795AD0
+2025-06-26 11:34:50.497 IST [1554712] WARNING:  tx_timestamp: 2025-06-26T06:02:22.458908Z
+2025-06-26 11:34:50.497 IST [1554712] WARNING:  user column "id": 2
+2025-06-26 11:34:50.497 IST [1554712] WARNING:  final recomputed hash: \xc0b9d5c1e66af3906135f45766d5cdc21f6d0504ec85ecda1f042fbfa84ecb07
+2025-06-26 11:34:50.497 IST [1554712] WARNING:  ---- End Hash Input Debug ----
+2025-06-26 11:34:50.497 IST [1554712] WARNING:  ---- Begin Hash Input Debug ----
+2025-06-26 11:34:50.497 IST [1554712] WARNING:  prev_hash: \xc0b9d5c1e66af3906135f45766d5cdc21f6d0504ec85ecda1f042fbfa84ecb07
+2025-06-26 11:34:50.497 IST [1554712] WARNING:  tx_lsn: 0/1795C20
+2025-06-26 11:34:50.497 IST [1554712] WARNING:  tx_timestamp: 2025-06-26T06:02:22.458964Z
+2025-06-26 11:34:50.497 IST [1554712] WARNING:  user column "id": 3
+2025-06-26 11:34:50.497 IST [1554712] WARNING:  final recomputed hash: \x2b1f3e10fc4154c5634058b2b6a4cd634147236c9a4d6f536790b7d873cfee76
+2025-06-26 11:34:50.497 IST [1554712] WARNING:  ---- End Hash Input Debug ----
+2025-06-26 11:36:32.429 IST [1546568] LOG:  checkpoint starting: time
+2025-06-26 11:36:40.979 IST [1546568] LOG:  checkpoint complete: wrote 85 buffers (0.5%), wrote 3 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=8.531 s, sync=0.009 s, total=8.551 s; sync files=44, longest=0.007 s, average=0.001 s; distance=530 kB, estimate=530 kB; lsn=0/17E5A20, redo lsn=0/17E5990
+2025-06-26 11:44:56.825 IST [1554712] ERROR:  relation "pg_dump" does not exist at character 21
+2025-06-26 11:44:56.825 IST [1554712] STATEMENT:  SELECT relkind FROM pg_dump;
+2025-06-26 12:19:31.487 IST [1546534] LOG:  received fast shutdown request
+2025-06-26 12:19:31.488 IST [1546534] LOG:  aborting any active transactions
+2025-06-26 12:19:31.488 IST [1554712] FATAL:  terminating connection due to administrator command
+2025-06-26 12:19:31.489 IST [1546534] LOG:  background worker "logical replication launcher" (PID 1546578) exited with exit code 1
+2025-06-26 12:19:31.489 IST [1546568] LOG:  shutting down
+2025-06-26 12:19:31.490 IST [1546568] LOG:  checkpoint starting: shutdown immediate
+2025-06-26 12:19:31.494 IST [1546568] LOG:  checkpoint complete: wrote 0 buffers (0.0%), wrote 0 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.001 s, sync=0.001 s, total=0.005 s; sync files=0, longest=0.000 s, average=0.000 s; distance=0 kB, estimate=477 kB; lsn=0/17E5AD0, redo lsn=0/17E5AD0
+2025-06-26 12:19:31.499 IST [1546534] LOG:  database system is shut down
+2025-07-18 09:04:55.993 IST [19150] LOG:  starting PostgreSQL 18beta1 on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 13.3.0-6ubuntu2~24.04) 13.3.0, 64-bit
+2025-07-18 09:04:55.994 IST [19150] LOG:  listening on IPv4 address "127.0.0.1", port 5432
+2025-07-18 09:04:55.997 IST [19150] LOG:  listening on Unix socket "/tmp/.s.PGSQL.5432"
+2025-07-18 09:04:56.002 IST [19156] LOG:  database system was shut down at 2025-07-18 09:04:44 IST
+2025-07-18 09:04:56.006 IST [19150] LOG:  database system is ready to accept connections
+2025-07-18 09:06:26.725 IST [19203] ERROR:  function anchor_bc_query(unknown, unknown) does not exist at character 8
+2025-07-18 09:06:26.725 IST [19203] HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+2025-07-18 09:06:26.725 IST [19203] STATEMENT:  SELECT anchor_bc_query('test', 'SELECT * FROM data');
+2025-07-18 09:09:56.057 IST [19154] LOG:  checkpoint starting: time
+2025-07-18 09:10:04.731 IST [19154] LOG:  checkpoint complete: wrote 86 buffers (0.5%), wrote 3 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=8.651 s, sync=0.011 s, total=8.675 s; sync files=45, longest=0.003 s, average=0.001 s; distance=541 kB, estimate=541 kB; lsn=0/17E84E0, redo lsn=0/17E8450
+2025-07-18 09:20:18.216 IST [19150] LOG:  received fast shutdown request
+2025-07-18 09:20:18.223 IST [19150] LOG:  aborting any active transactions
+2025-07-18 09:20:18.223 IST [19203] FATAL:  terminating connection due to administrator command
+2025-07-18 09:20:18.224 IST [19150] LOG:  background worker "logical replication launcher" (PID 19159) exited with exit code 1
+2025-07-18 09:20:18.225 IST [19154] LOG:  shutting down
+2025-07-18 09:20:18.226 IST [19154] LOG:  checkpoint starting: shutdown immediate
+2025-07-18 09:20:18.232 IST [19154] LOG:  checkpoint complete: wrote 0 buffers (0.0%), wrote 0 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.001 s, sync=0.001 s, total=0.008 s; sync files=0, longest=0.000 s, average=0.000 s; distance=0 kB, estimate=487 kB; lsn=0/17E8590, redo lsn=0/17E8590
+2025-07-18 09:20:18.242 IST [19150] LOG:  database system is shut down
+2025-07-21 09:28:05.008 IST [57086] LOG:  starting PostgreSQL 18beta1 on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 13.3.0-6ubuntu2~24.04) 13.3.0, 64-bit
+2025-07-21 09:28:05.010 IST [57086] LOG:  listening on IPv4 address "127.0.0.1", port 5432
+2025-07-21 09:28:05.013 IST [57086] LOG:  listening on Unix socket "/tmp/.s.PGSQL.5432"
+2025-07-21 09:28:05.019 IST [57092] LOG:  database system was shut down at 2025-07-21 09:27:45 IST
+2025-07-21 09:28:05.023 IST [57086] LOG:  database system is ready to accept connections
+2025-07-21 09:29:22.353 IST [57450] LOG:  No previous hash or lsn found, initializing to zero
+2025-07-21 09:29:22.353 IST [57450] STATEMENT:  INSERT INTO b VALUES(4),(5),(6);
+2025-07-21 09:29:22.353 IST [57450] LOG:  === get_previous_hash_and_lsn END ===
+2025-07-21 09:29:22.353 IST [57450] STATEMENT:  INSERT INTO b VALUES(4),(5),(6);
+2025-07-21 09:29:22.353 IST [57450] WARNING:  ==== BEGIN compute_curr_hash DEBUG ====
+2025-07-21 09:29:22.357 IST [57450] WARNING:  COMPUTE: prev_hash: \x0000000000000000000000000000000000000000000000000000000000000000
+2025-07-21 09:29:22.357 IST [57450] WARNING:  COMPUTE: tx_lsn: 0/1798B18
+2025-07-21 09:29:22.357 IST [57450] WARNING:  tx_timestamp: 2025-07-21T03:59:22.353009Z
+2025-07-21 09:29:22.357 IST [57450] WARNING:  COMPUTE: Total attributes: 10, User attributes: 1, NUM_BLOCKCHAIN_COLUMNS: 9
+2025-07-21 09:29:22.357 IST [57450] WARNING:  COMPUTE: user column 0 ("id"): 4
+2025-07-21 09:29:22.357 IST [57450] WARNING:  COMPUTE: final computed hash: \xec4e7fdefc11949650bf1078c4a5f9ed262a081fdc4d8bcab6935b357aaef694
+2025-07-21 09:29:22.357 IST [57450] WARNING:  ==== END compute_curr_hash DEBUG ====
+2025-07-21 09:29:22.357 IST [57450] WARNING:  ==== BEGIN compute_curr_hash DEBUG ====
+2025-07-21 09:29:22.357 IST [57450] WARNING:  COMPUTE: prev_hash: \xec4e7fdefc11949650bf1078c4a5f9ed262a081fdc4d8bcab6935b357aaef694
+2025-07-21 09:29:22.357 IST [57450] WARNING:  COMPUTE: tx_lsn: 0/1798C68
+2025-07-21 09:29:22.357 IST [57450] WARNING:  tx_timestamp: 2025-07-21T03:59:22.357636Z
+2025-07-21 09:29:22.357 IST [57450] WARNING:  COMPUTE: Total attributes: 10, User attributes: 1, NUM_BLOCKCHAIN_COLUMNS: 9
+2025-07-21 09:29:22.357 IST [57450] WARNING:  COMPUTE: user column 0 ("id"): 5
+2025-07-21 09:29:22.357 IST [57450] WARNING:  COMPUTE: final computed hash: \x5863c2f97c5b5c798b77207115494476ea05483787f44ea7c3a21f1abc121be8
+2025-07-21 09:29:22.357 IST [57450] WARNING:  ==== END compute_curr_hash DEBUG ====
+2025-07-21 09:29:22.357 IST [57450] WARNING:  ==== BEGIN compute_curr_hash DEBUG ====
+2025-07-21 09:29:22.357 IST [57450] WARNING:  COMPUTE: prev_hash: \x5863c2f97c5b5c798b77207115494476ea05483787f44ea7c3a21f1abc121be8
+2025-07-21 09:29:22.357 IST [57450] WARNING:  COMPUTE: tx_lsn: 0/1798DB8
+2025-07-21 09:29:22.357 IST [57450] WARNING:  tx_timestamp: 2025-07-21T03:59:22.357899Z
+2025-07-21 09:29:22.357 IST [57450] WARNING:  COMPUTE: Total attributes: 10, User attributes: 1, NUM_BLOCKCHAIN_COLUMNS: 9
+2025-07-21 09:29:22.357 IST [57450] WARNING:  COMPUTE: user column 0 ("id"): 6
+2025-07-21 09:29:22.357 IST [57450] WARNING:  COMPUTE: final computed hash: \xb7b8551ab64f837ee345819a76201182f799bf721edb7d43666fda50496faf2d
+2025-07-21 09:29:22.358 IST [57450] WARNING:  ==== END compute_curr_hash DEBUG ====
+2025-07-21 09:33:05.044 IST [57090] LOG:  checkpoint starting: time
+2025-07-21 09:33:13.806 IST [57090] LOG:  checkpoint complete: wrote 87 buffers (0.5%), wrote 3 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=8.742 s, sync=0.008 s, total=8.762 s; sync files=45, longest=0.003 s, average=0.001 s; distance=542 kB, estimate=542 kB; lsn=0/17E8B28, redo lsn=0/17E8A98
+2025-07-21 09:35:38.728 IST [57450] ERROR:  cannot update blockchain table "b"
+2025-07-21 09:35:38.728 IST [57450] STATEMENT:  UPDATE b set id = 7 WHERE id = 4;
+2025-07-21 09:35:52.767 IST [57450] ERROR:  cannot delete from blockchain table "b"
+2025-07-21 09:35:52.767 IST [57450] STATEMENT:  DELETE FROM b WHERE id = 4;
+2025-07-21 11:46:00.333 IST [57086] LOG:  received smart shutdown request
+2025-07-21 11:46:00.336 IST [57086] LOG:  background worker "logical replication launcher" (PID 57095) exited with exit code 1
+2025-07-21 11:46:00.336 IST [57090] LOG:  shutting down
+2025-07-21 11:46:00.338 IST [57090] LOG:  checkpoint starting: shutdown immediate

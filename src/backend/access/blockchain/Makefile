@@ -8,6 +8,7 @@ OBJS = \
 		blockchainam.o \
 		blockchain_utility.o \
 		blockchain_hash.o \
+		blockchain_anchor.o \
 		 $(top_builddir)/src/common/sha2.o
 
 override SHLIB_LINK += -luuid

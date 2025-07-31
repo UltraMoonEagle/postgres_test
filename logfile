@@ -1389,3 +1389,102 @@
 2025-06-25 14:19:47.953 IST [277066] LOG:  checkpoint starting: shutdown immediate
 2025-06-25 14:19:47.956 IST [277066] LOG:  checkpoint complete: wrote 0 buffers (0.0%), wrote 0 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.001 s, sync=0.001 s, total=0.005 s; sync files=0, longest=0.000 s, average=0.000 s; distance=0 kB, estimate=414 kB; lsn=0/17E50F0, redo lsn=0/17E50F0
 2025-06-25 14:19:47.960 IST [260023] LOG:  database system is shut down
+2025-07-18 09:38:38.612 IST [154808] LOG:  starting PostgreSQL 18beta1 on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 13.3.0-6ubuntu2~24.04) 13.3.0, 64-bit
+2025-07-18 09:38:38.613 IST [154808] LOG:  listening on IPv4 address "127.0.0.1", port 5432
+2025-07-18 09:38:38.616 IST [154808] LOG:  listening on Unix socket "/tmp/.s.PGSQL.5432"
+2025-07-18 09:38:38.622 IST [154814] LOG:  database system was shut down at 2025-07-18 09:38:12 IST
+2025-07-18 09:38:38.626 IST [154808] LOG:  database system is ready to accept connections
+2025-07-18 09:39:49.144 IST [154847] ERROR:  column "a" does not exist at character 27
+2025-07-18 09:39:49.144 IST [154847] STATEMENT:  INSERT INTO data VALUES(1,a),(2,b),(3,c);
+2025-07-18 09:40:30.264 IST [154847] ERROR:  column "test" does not exist at character 24
+2025-07-18 09:40:30.264 IST [154847] STATEMENT:  SELECT anchor_bc_query(test , 'SELECT * FROM data');
+2025-07-18 09:40:47.575 IST [154847] ERROR:  column "anchor_hash" does not exist at character 24
+2025-07-18 09:40:47.575 IST [154847] STATEMENT:  SELECT anchor_bc_query(anchor_hash , 'SELECT * FROM data');
+2025-07-18 09:41:15.665 IST [154847] LOG:  No previous hash or lsn found, initializing to zero
+2025-07-18 09:41:15.665 IST [154847] CONTEXT:  SQL statement "INSERT INTO test(anchor_hash) VALUES ($1);"
+2025-07-18 09:41:15.665 IST [154847] STATEMENT:  SELECT anchor_bc_query('test' , 'SELECT * FROM data');
+2025-07-18 09:41:15.665 IST [154847] LOG:  === get_previous_hash_and_lsn END ===
+2025-07-18 09:41:15.665 IST [154847] CONTEXT:  SQL statement "INSERT INTO test(anchor_hash) VALUES ($1);"
+2025-07-18 09:41:15.665 IST [154847] STATEMENT:  SELECT anchor_bc_query('test' , 'SELECT * FROM data');
+2025-07-18 09:41:15.665 IST [154847] WARNING:  ==== BEGIN compute_curr_hash DEBUG ====
+2025-07-18 09:41:15.665 IST [154847] CONTEXT:  SQL statement "INSERT INTO test(anchor_hash) VALUES ($1);"
+2025-07-18 09:41:15.665 IST [154847] WARNING:  COMPUTE: prev_hash: \x0000000000000000000000000000000000000000000000000000000000000000
+2025-07-18 09:41:15.665 IST [154847] CONTEXT:  SQL statement "INSERT INTO test(anchor_hash) VALUES ($1);"
+2025-07-18 09:41:15.665 IST [154847] WARNING:  COMPUTE: tx_lsn: 0/17E49E8
+2025-07-18 09:41:15.665 IST [154847] CONTEXT:  SQL statement "INSERT INTO test(anchor_hash) VALUES ($1);"
+2025-07-18 09:41:15.665 IST [154847] WARNING:  tx_timestamp: 2025-07-18T04:11:15.665472Z
+2025-07-18 09:41:15.665 IST [154847] CONTEXT:  SQL statement "INSERT INTO test(anchor_hash) VALUES ($1);"
+2025-07-18 09:41:15.665 IST [154847] WARNING:  COMPUTE: Total attributes: 10, User attributes: 1, NUM_BLOCKCHAIN_COLUMNS: 9
+2025-07-18 09:41:15.665 IST [154847] CONTEXT:  SQL statement "INSERT INTO test(anchor_hash) VALUES ($1);"
+2025-07-18 09:41:15.665 IST [154847] WARNING:  COMPUTE: user column 0 ("anchor_hash"): \x96b8b43b198b278c2242dd44ed27e80dd3dcd860be69cda1f805ef50e2667760
+2025-07-18 09:41:15.665 IST [154847] CONTEXT:  SQL statement "INSERT INTO test(anchor_hash) VALUES ($1);"
+2025-07-18 09:41:15.665 IST [154847] WARNING:  COMPUTE: final computed hash: \xa036aa0a985939af444b76ee5db0b79f7e75d79b85600ee83f17af9ea5fde0e1
+2025-07-18 09:41:15.665 IST [154847] CONTEXT:  SQL statement "INSERT INTO test(anchor_hash) VALUES ($1);"
+2025-07-18 09:41:15.665 IST [154847] WARNING:  ==== END compute_curr_hash DEBUG ====
+2025-07-18 09:41:15.665 IST [154847] CONTEXT:  SQL statement "INSERT INTO test(anchor_hash) VALUES ($1);"
+2025-07-18 09:41:27.904 IST [154808] LOG:  client backend (PID 154847) was terminated by signal 11: Segmentation fault
+2025-07-18 09:41:27.904 IST [154808] DETAIL:  Failed process was running: SELECT * FROM test;
+2025-07-18 09:41:27.904 IST [154808] LOG:  terminating any other active server processes
+2025-07-18 09:41:27.904 IST [173997] FATAL:  the database system is in recovery mode
+2025-07-18 09:41:27.905 IST [154808] LOG:  all server processes terminated; reinitializing
+2025-07-18 09:41:27.930 IST [174001] LOG:  database system was interrupted; last known up at 2025-07-18 09:38:38 IST
+2025-07-18 09:41:27.985 IST [174001] LOG:  database system was not properly shut down; automatic recovery in progress
+2025-07-18 09:41:27.988 IST [174001] LOG:  redo starts at 0/17611D0
+2025-07-18 09:41:27.992 IST [174001] LOG:  invalid record length at 0/17E4B20: expected at least 24, got 0
+2025-07-18 09:41:27.992 IST [174001] LOG:  redo done at 0/17E4AE8 system usage: CPU: user: 0.00 s, system: 0.00 s, elapsed: 0.00 s
+2025-07-18 09:41:27.996 IST [174002] LOG:  checkpoint starting: end-of-recovery immediate wait
+2025-07-18 09:41:28.011 IST [174002] LOG:  checkpoint complete: wrote 87 buffers (0.5%), wrote 3 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.005 s, sync=0.006 s, total=0.017 s; sync files=48, longest=0.002 s, average=0.001 s; distance=526 kB, estimate=526 kB; lsn=0/17E4B20, redo lsn=0/17E4B20
+2025-07-18 09:41:28.013 IST [154808] LOG:  database system is ready to accept connections
+2025-07-18 09:46:27.110 IST [174002] LOG:  checkpoint starting: time
+2025-07-18 09:46:27.832 IST [174002] LOG:  checkpoint complete: wrote 7 buffers (0.0%), wrote 0 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.703 s, sync=0.008 s, total=0.722 s; sync files=5, longest=0.007 s, average=0.002 s; distance=35 kB, estimate=477 kB; lsn=0/17ED830, redo lsn=0/17ED7D8
+2025-07-18 09:54:22.010 IST [175338] ERROR:  syntax error at or near "REFRENCES" at character 53
+2025-07-18 09:54:22.010 IST [175338] STATEMENT:  CREATE TABLE orders(id int PRIMARY KEY, user_id INT REFRENCES users(id), amount INT);
+2025-07-18 09:54:34.754 IST [175338] ERROR:  syntax error at or near "REFRENCES" at character 53
+2025-07-18 09:54:34.754 IST [175338] STATEMENT:  CREATE TABLE orders(id int PRIMARY KEY, user_id int REFRENCES users(id), amount INT);
+2025-07-18 09:56:28.008 IST [174002] LOG:  checkpoint starting: time
+2025-07-18 09:56:32.754 IST [174002] LOG:  checkpoint complete: wrote 47 buffers (0.3%), wrote 1 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=4.727 s, sync=0.008 s, total=4.747 s; sync files=38, longest=0.003 s, average=0.001 s; distance=220 kB, estimate=451 kB; lsn=0/1824A00, redo lsn=0/18249A8
+2025-07-18 09:58:22.774 IST [223667] ERROR:  syntax error at or near ";" at character 29
+2025-07-18 09:58:22.774 IST [223667] STATEMENT:  CREATE BLOCKCHAIN TABLE test;
+2025-07-18 09:58:48.730 IST [223667] LOG:  No previous hash or lsn found, initializing to zero
+2025-07-18 09:58:48.730 IST [223667] CONTEXT:  SQL statement "INSERT INTO test(anchor_hash) VALUES ($1);"
+2025-07-18 09:58:48.730 IST [223667] STATEMENT:  SELECT anchor_bc_query(
+	  'test',
+	  $q$
+	    SELECT u.id, u.name, o.amount
+	    FROM users u
+	    JOIN orders o ON u.id = o.user_id
+	    ORDER BY u.id, o.id
+	  $q$
+	);
+2025-07-18 09:58:48.730 IST [223667] LOG:  === get_previous_hash_and_lsn END ===
+2025-07-18 09:58:48.730 IST [223667] CONTEXT:  SQL statement "INSERT INTO test(anchor_hash) VALUES ($1);"
+2025-07-18 09:58:48.730 IST [223667] STATEMENT:  SELECT anchor_bc_query(
+	  'test',
+	  $q$
+	    SELECT u.id, u.name, o.amount
+	    FROM users u
+	    JOIN orders o ON u.id = o.user_id
+	    ORDER BY u.id, o.id
+	  $q$
+	);
+2025-07-18 09:58:48.731 IST [223667] WARNING:  ==== BEGIN compute_curr_hash DEBUG ====
+2025-07-18 09:58:48.731 IST [223667] CONTEXT:  SQL statement "INSERT INTO test(anchor_hash) VALUES ($1);"
+2025-07-18 09:58:48.731 IST [223667] WARNING:  COMPUTE: prev_hash: \x0000000000000000000000000000000000000000000000000000000000000000
+2025-07-18 09:58:48.731 IST [223667] CONTEXT:  SQL statement "INSERT INTO test(anchor_hash) VALUES ($1);"
+2025-07-18 09:58:48.731 IST [223667] WARNING:  COMPUTE: tx_lsn: 0/185C038
+2025-07-18 09:58:48.731 IST [223667] CONTEXT:  SQL statement "INSERT INTO test(anchor_hash) VALUES ($1);"
+2025-07-18 09:58:48.731 IST [223667] WARNING:  tx_timestamp: 2025-07-18T04:28:48.730833Z
+2025-07-18 09:58:48.731 IST [223667] CONTEXT:  SQL statement "INSERT INTO test(anchor_hash) VALUES ($1);"
+2025-07-18 09:58:48.731 IST [223667] WARNING:  COMPUTE: Total attributes: 10, User attributes: 1, NUM_BLOCKCHAIN_COLUMNS: 9
+2025-07-18 09:58:48.731 IST [223667] CONTEXT:  SQL statement "INSERT INTO test(anchor_hash) VALUES ($1);"
+2025-07-18 09:58:48.731 IST [223667] WARNING:  COMPUTE: user column 0 ("anchor_hash"): \xc9e416594069590e2d15c683b8637b42638b0457b2cf1899509cc8cbede56a14
+2025-07-18 09:58:48.731 IST [223667] CONTEXT:  SQL statement "INSERT INTO test(anchor_hash) VALUES ($1);"
+2025-07-18 09:58:48.731 IST [223667] WARNING:  COMPUTE: final computed hash: \xa64e4b43c2a469590be3d80ae5c5d89c2417c9ff927d2edafe0c474b02f1c978
+2025-07-18 09:58:48.731 IST [223667] CONTEXT:  SQL statement "INSERT INTO test(anchor_hash) VALUES ($1);"
+2025-07-18 09:58:48.731 IST [223667] WARNING:  ==== END compute_curr_hash DEBUG ====
+2025-07-18 09:58:48.731 IST [223667] CONTEXT:  SQL statement "INSERT INTO test(anchor_hash) VALUES ($1);"
+2025-07-18 10:01:28.854 IST [174002] LOG:  checkpoint starting: time
+2025-07-18 10:01:33.201 IST [174002] LOG:  checkpoint complete: wrote 43 buffers (0.3%), wrote 1 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=4.322 s, sync=0.014 s, total=4.347 s; sync files=31, longest=0.008 s, average=0.001 s; distance=221 kB, estimate=428 kB; lsn=0/185C200, redo lsn=0/185C170
+2025-07-18 10:08:49.882 IST [154808] LOG:  received smart shutdown request
+2025-07-18 10:08:49.885 IST [174002] LOG:  shutting down
+2025-07-18 10:08:49.890 IST [174002] LOG:  checkpoint starting: shutdown immediate
