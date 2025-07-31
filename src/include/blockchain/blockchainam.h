@@ -10,7 +10,7 @@
  *
  *-------------------------------------------------------------------------
  */
-#ifndef BLOCKCHAINAM_
+#ifndef BLOCKCHAINAM_H
 #define BLOCKCHAINAM_H
 
 #include "access/tableam.h"
@@ -28,7 +28,8 @@ typedef struct BlockchainColumnDef
 
 extern const TableAmRoutine *GetBlockchainTableAmRoutine(void);
 extern const TableAmRoutine blockchainam_methods;
-extern bytea *compute_curr_hash(Relation rel, TupleTableSlot *slot, TimestampTz ts, bytea *prev_hash, XLogRecPtr tx_lsn);
+extern bytea *compute_curr_hash(Relation rel, TupleTableSlot *slot, TimestampTz ts, bytea *prev_hash);
+extern bytea *compute_curr_hash_with_counter(Relation rel, TupleTableSlot *slot, TimestampTz ts, bytea *prev_hash, uint64 counter);
 
 
 static BlockchainColumnDef blockchain_system_columns[] = {
@@ -36,7 +37,7 @@ static BlockchainColumnDef blockchain_system_columns[] = {
 	{"__curr_hash", BYTEAOID, -1, -1},
 	{"__prev_hash", BYTEAOID, -1, -1},
 	{"__tx_type", TEXTOID, -1, -1},
-	{"__tx_lsn", PG_LSNOID, -1, -1},
+	{"__tx_lsn", INT8OID, -1, -1},  /* Changed from LSN to INT8 for counter */
 	{"__tx_origin", UUIDOID, -1, -1},
 	{"__tx_version", INT4OID, -1, -1},
 	{"__is_latest", BOOLOID, -1, -1},

@@ -36,6 +36,7 @@
 PG_FUNCTION_INFO_V1(verify_blockchain_chain);
 
 static bytea *recompute_hash(Relation rel, HeapTuple tuple, bytea *prev_hash, XLogRecPtr tx_lsn, TimestampTz ts);
+static bytea *recompute_hash_with_counter(Relation rel, HeapTuple tuple, bytea *prev_hash, uint64 counter, TimestampTz ts);
 
 static void
 CreateBlockchainViewsInternal(const char *relname, Oid relnamespace)
@@ -182,14 +183,15 @@ verify_blockchain_chain(PG_FUNCTION_ARGS)
         Datum d_lsn = heap_getattr(tuple, get_attnum(RelationGetRelid(rel), "__tx_lsn"), tupdesc, &isnull);
         if (isnull)
             elog(ERROR, "__tx_lsn column is NULL");
-        XLogRecPtr tx_lsn = DatumGetLSN(d_lsn);
+        /* Now it's a counter (int8) instead of LSN */
+        uint64 counter = DatumGetInt64(d_lsn);
 
         Datum d_ts = heap_getattr(tuple, get_attnum(RelationGetRelid(rel), "__tx_timestamp"), tupdesc, &isnull);
         if (isnull)
             elog(ERROR, "__tx_timestamp column is NULL");
         TimestampTz tx_ts = DatumGetTimestampTz(d_ts);
 
-        bytea *recomputed = recompute_hash(rel, tuple, last_curr_hash, tx_lsn, tx_ts);
+        bytea *recomputed = recompute_hash_with_counter(rel, tuple, last_curr_hash, counter, tx_ts);
 
         bool curr_mismatch = (VARSIZE_ANY_EXHDR(curr_hash_stored) != VARSIZE_ANY_EXHDR(recomputed) ||
             memcmp(VARDATA_ANY(curr_hash_stored), VARDATA_ANY(recomputed), VARSIZE_ANY_EXHDR(curr_hash_stored)) != 0);
@@ -332,6 +334,105 @@ recompute_hash(Relation rel, HeapTuple tuple, bytea *prev_hash, XLogRecPtr tx_ls
         sprintf(&hexbuf[i * 2], "%02x", ((unsigned char *) hash_output)[i]);
     elog(WARNING, "final recomputed hash: \\x%s", hexbuf);
     elog(WARNING, "---- End Hash Input Debug ----");
+
+    result = (bytea *) MemoryContextAlloc(CurrentMemoryContext, VARHDRSZ + BC_SHA256_DIGEST_LENGTH);
+    SET_VARSIZE(result, VARHDRSZ + BC_SHA256_DIGEST_LENGTH);
+    memcpy(VARDATA(result), hash_output, BC_SHA256_DIGEST_LENGTH);
+
+    return result;
+}
+
+/*
+ * recompute_hash_with_counter - Recompute hash using counter instead of LSN
+ *
+ * This is the counter-based version of recompute_hash, used for verification
+ * when the blockchain table uses global counters instead of LSNs.
+ */
+static bytea *
+recompute_hash_with_counter(Relation rel, HeapTuple tuple, bytea *prev_hash, uint64 counter, TimestampTz ts)
+{
+    TupleDesc tupdesc = RelationGetDescr(rel);
+    bc_sha256_ctx ctx;
+    uint8 hash_output[BC_SHA256_DIGEST_LENGTH];
+    bytea *result;
+    char counterbuf[32];
+
+    memset(&ctx, 0, sizeof(ctx));
+    bc_sha256_init(&ctx);
+
+    elog(DEBUG1, "---- Begin Hash Recomputation (Counter) ----");
+
+    /* 1. Previous hash */
+    if (prev_hash && VARSIZE_ANY_EXHDR(prev_hash) > 0)
+    {
+        elog(DEBUG2, "prev_hash exists, size: %d", VARSIZE_ANY_EXHDR(prev_hash));
+        bc_sha256_update(&ctx, (uint8 *) VARDATA_ANY(prev_hash),
+                         VARSIZE_ANY_EXHDR(prev_hash));
+    }
+    else
+    {
+        elog(DEBUG2, "prev_hash: (null), using zero hash");
+        static const uint8 zero_hash[BC_SHA256_DIGEST_LENGTH] = {0};
+        bc_sha256_update(&ctx, zero_hash, BC_SHA256_DIGEST_LENGTH);
+    }
+
+    /* 2. Counter (instead of LSN) */
+    snprintf(counterbuf, sizeof(counterbuf), "%lu", counter);
+    elog(DEBUG2, "counter: %s", counterbuf);
+    bc_sha256_update(&ctx, (const uint8 *) counterbuf, strlen(counterbuf));
+
+    /* 3. Timestamp (formatted as ISO 8601 UTC) */
+    char tsbuf[64];
+    struct pg_tm tm;
+    fsec_t fsec;
+    const char *tzn;
+
+    if (timestamp2tm(ts, NULL, &tm, &fsec, &tzn, NULL) == 0)
+    {
+        snprintf(tsbuf, sizeof(tsbuf),
+                 "%04d-%02d-%02dT%02d:%02d:%02d.%06dZ",
+                 tm.tm_year, tm.tm_mon, tm.tm_mday,
+                 tm.tm_hour, tm.tm_min, tm.tm_sec, (int) fsec);
+        elog(DEBUG2, "tx_timestamp: %s", tsbuf);
+        bc_sha256_update(&ctx, (const uint8 *) tsbuf, strlen(tsbuf));
+    }
+    else
+    {
+        elog(ERROR, "Failed to format timestamp for hashing");
+    }
+
+    /* 4. User-defined columns ONLY (exclude blockchain columns) */
+    int user_natts = tupdesc->natts - NUM_BLOCKCHAIN_COLUMNS;
+    for (int i = 0; i < user_natts; i++)
+    {
+        Form_pg_attribute attr = TupleDescAttr(tupdesc, i);
+        if (attr->attisdropped)
+            continue;
+
+        Datum val;
+        bool isnull;
+        val = heap_getattr(tuple, attr->attnum, tupdesc, &isnull);
+
+        if (!isnull)
+        {
+            Oid typoutput;
+            bool typisvarlena;
+            getTypeOutputInfo(attr->atttypid, &typoutput, &typisvarlena);
+            char *outputstr = OidOutputFunctionCall(typoutput, val);
+            elog(DEBUG3, "user column \"%s\": %s", NameStr(attr->attname), outputstr);
+            bc_sha256_update(&ctx, (const uint8 *) outputstr, strlen(outputstr));
+            pfree(outputstr);
+        }
+        else
+        {
+            elog(DEBUG3, "user column \"%s\": (null)", NameStr(attr->attname));
+        }
+    }
+
+    /* Finalize the hash */
+    bc_sha256_final(&ctx, hash_output);
+
+    elog(DEBUG1, "---- End Hash Recomputation (Counter) ----");
 
     result = (bytea *) MemoryContextAlloc(CurrentMemoryContext, VARHDRSZ + BC_SHA256_DIGEST_LENGTH);
     SET_VARSIZE(result, VARHDRSZ + BC_SHA256_DIGEST_LENGTH);

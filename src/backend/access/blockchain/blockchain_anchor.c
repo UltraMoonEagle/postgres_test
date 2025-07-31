@@ -10,6 +10,7 @@
 #include "access/htup_details.h"
 #include "catalog/pg_type.h"
 #include "miscadmin.h"
+#include "utils/lsyscache.h"
 
 #include "blockchain/blockchain_hash.h" 
 
@@ -46,7 +47,7 @@ anchor_bc_query(PG_FUNCTION_ARGS)
     }
     PG_CATCH();
     {
-        if (SPI_connect)
+        /* Clean up SPI if connected */
             SPI_finish();
         ereport(ERROR,
                 (errmsg("Error in anchor_bc_query during query hash computation")));
@@ -74,7 +75,7 @@ anchor_bc_query(PG_FUNCTION_ARGS)
     }
     PG_CATCH();
     {
-        if (SPI_connect)
+        /* Clean up SPI if connected */
             SPI_finish();
         ereport(ERROR,
                 (errmsg("Error in anchor_bc_query during blockchain insert")));
