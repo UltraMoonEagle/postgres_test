@@ -157,6 +157,35 @@ else
     echo "Skipping heavy concurrent test."
 fi
 
+echo -e "${BLUE}Saving file to CSV${NC}"
+
+$HOME/pgsql/bin/psql -d $PGDATABASE -c "\copy (
+    WITH hash_chain AS (
+        SELECT 
+            __tx_lsn,
+            random_data,
+            insert_timestamp,
+            encode(__curr_hash, 'hex') as curr_hash_hex,
+            encode(__prev_hash, 'hex') as prev_hash_hex,
+            CASE 
+                WHEN __tx_lsn = 1 THEN 'GENESIS'
+                ELSE 'LINKED'
+            END as chain_status
+        FROM blockchain_stress
+        ORDER BY __tx_lsn
+    )
+    SELECT 
+        __tx_lsn as seq,
+        random_data,
+        insert_timestamp,
+        curr_hash_hex,
+        prev_hash_hex,
+        chain_status
+    FROM hash_chain
+) TO 'hash_chain_export.csv' WITH CSV HEADER;
+"
+
+
 echo ""
 echo -e "${BLUE}Final Summary:${NC}"
 
