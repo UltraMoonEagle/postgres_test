@@ -8,8 +8,6 @@ echo "PostgreSQL Blockchain Table - Concurrent Testing Suite"
 echo "============================================================================"
 
 # Set PostgreSQL connection parameters
-PGHOST=localhost
-PGPORT=5432
 PGDATABASE=postgres
 
 # Colors for output
@@ -22,7 +20,7 @@ NC='\033[0m' # No Color
 echo -e "${BLUE}Setting up test environment...${NC}"
 
 # Setup the blockchain_stress table
-$HOME/pgsql/bin/psql -h $PGHOST -p $PGPORT -d $PGDATABASE -c "
+$HOME/pgsql/bin/psql -d $PGDATABASE -c "
 DROP BLOCKCHAIN TABLE IF EXISTS blockchain_stress CASCADE;
 CREATE BLOCKCHAIN TABLE blockchain_stress (
     thread_id INTEGER,
@@ -42,13 +40,13 @@ fi
 # Test 1: Light concurrent load
 echo -e "${YELLOW}Test 1: Light Concurrent Load (3 clients, 20 transactions each)${NC}"
 
-$HOME/pgsql/bin/pgbench -h $PGHOST -p $PGPORT -d $PGDATABASE -f pgbench_concurrent_test.sql -c 3 -j 3 -t 20 --no-vacuum > /tmp/pgbench_light.log 2>&1
+$HOME/pgsql/bin/pgbench -d $PGDATABASE -f pgbench_concurrent_test.sql -c 3 -j 3 -t 20 --no-vacuum > /tmp/pgbench_light.log 2>&1
 
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}✓ Light concurrent test completed${NC}"
     
     # Show results
-    $HOME/pgsql/bin/psql -h $PGHOST -p $PGPORT -d $PGDATABASE -c "
+    $HOME/pgsql/bin/psql -d $PGDATABASE -c "
     SELECT 
         COUNT(*) as total_inserts,
         COUNT(DISTINCT __tx_lsn) as unique_counters,
@@ -73,13 +71,13 @@ echo ""
 # Test 2: Medium concurrent load
 echo -e "${YELLOW}Test 2: Medium Concurrent Load (5 clients, 50 transactions each)${NC}"
 
-$HOME/pgsql/bin/pgbench -h $PGHOST -p $PGPORT -d $PGDATABASE -f pgbench_concurrent_test.sql -c 5 -j 5 -t 50 --no-vacuum > /tmp/pgbench_medium.log 2>&1
+$HOME/pgsql/bin/pgbench -d $PGDATABASE -f pgbench_concurrent_test.sql -c 5 -j 5 -t 50 --no-vacuum > /tmp/pgbench_medium.log 2>&1
 
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}✓ Medium concurrent test completed${NC}"
     
     # Show cumulative results
-    $HOME/pgsql/bin/psql -h $PGHOST -p $PGPORT -d $PGDATABASE -c "
+    $HOME/pgsql/bin/psql -d $PGDATABASE -c "
     SELECT 
         COUNT(*) as total_inserts,
         COUNT(DISTINCT __tx_lsn) as unique_counters,
@@ -108,13 +106,13 @@ echo ""
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     echo "Running heavy concurrent stress test..."
     
-    $HOME/pgsql/bin/pgbench -h $PGHOST -p $PGPORT -d $PGDATABASE -f pgbench_concurrent_test.sql -c 10 -j 10 -t 100 --no-vacuum --progress=50 > /tmp/pgbench_heavy.log 2>&1
+    $HOME/pgsql/bin/pgbench -d $PGDATABASE -f pgbench_concurrent_test.sql -c 10 -j 10 -t 100 --no-vacuum --progress=50 > /tmp/pgbench_heavy.log 2>&1
     
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}✓ Heavy concurrent test completed${NC}"
         
         # Comprehensive results
-        $HOME/pgsql/bin/psql -h $PGHOST -p $PGPORT -d $PGDATABASE -c "
+        $HOME/pgsql/bin/psql -d $PGDATABASE -c "
         SELECT 
             COUNT(*) as total_rows,
             COUNT(DISTINCT __tx_lsn) as unique_counters,
@@ -135,7 +133,7 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
         
         # Hash chain verification
         echo -e "${BLUE}Verifying hash chain integrity...${NC}"
-        $HOME/pgsql/bin/psql -h $PGHOST -p $PGPORT -d $PGDATABASE -c "
+        $HOME/pgsql/bin/psql -d $PGDATABASE -c "
         WITH hash_check AS (
             SELECT 
                 __tx_lsn,
@@ -163,7 +161,7 @@ echo ""
 echo -e "${BLUE}Final Summary:${NC}"
 
 # Final summary
-$HOME/pgsql/bin/psql -h $PGHOST -p $PGPORT -d $PGDATABASE -c "
+$HOME/pgsql/bin/psql -d $PGDATABASE -c "
 SELECT 
     'blockchain_stress' as table_name,
     COUNT(*) as total_records,
