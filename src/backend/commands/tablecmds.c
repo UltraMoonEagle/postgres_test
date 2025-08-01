@@ -3918,15 +3918,8 @@ renameatt_check(Oid myrelid, Form_pg_class classform, bool recursing)
 						NameStr(classform->relname)),
 				 errdetail_relkind_not_supported(relkind)));
 
-	/*
-	 * Blockchain tables are immutable - no column renames allowed
-	 */
-	if (relkind == RELKIND_BLOCKCHAIN_TABLE)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot rename columns of blockchain table \"%s\"",
-						NameStr(classform->relname)),
-				 errdetail("Blockchain tables are immutable and do not support column renaming.")));
+	/* Note: System column rename prevention for blockchain tables 
+	 * is handled in renameatt() function */
 
 	/*
 	 * permissions checking.  only the owner of a class can change its schema.
@@ -4130,6 +4123,32 @@ renameatt(RenameStmt *stmt)
 				(errmsg("relation \"%s\" does not exist, skipping",
 						stmt->relation->relname)));
 		return InvalidObjectAddress;
+	}
+
+	/* Check for blockchain tables - prevent system column renaming */
+	{
+		HeapTuple	tuple;
+		Form_pg_class classform;
+
+		tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
+		if (HeapTupleIsValid(tuple))
+		{
+			classform = (Form_pg_class) GETSTRUCT(tuple);
+			if (classform->relkind == RELKIND_BLOCKCHAIN_TABLE)
+			{
+				/* Check if this is a system column (starts with '__') */
+				if (strncmp(stmt->subname, "__", 2) == 0)
+				{
+					ReleaseSysCache(tuple);
+					ereport(ERROR,
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							 errmsg("cannot rename system column \"%s\" of blockchain table \"%s\"",
+									stmt->subname, stmt->relation->relname),
+							 errdetail("Blockchain system columns are immutable and cannot be renamed.")));
+				}
+			}
+			ReleaseSysCache(tuple);
+		}
 	}
 
 	attnum =
