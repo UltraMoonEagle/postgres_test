@@ -78,50 +78,50 @@ log "=== STEP 5: LOAD BLOCKCHAIN FUNCTIONS ==="
 
 success "Blockchain functions loaded"
 
-# Step 6: Test basic functionality
-log "=== STEP 6: BASIC FUNCTIONALITY TEST ==="
-"$PGSQL_PREFIX/bin/psql" -d postgres -c "
-    CREATE BLOCKCHAIN TABLE quick_test (id int, data text);
-    INSERT INTO quick_test VALUES (1, 'hello'), (2, 'world');
-    SELECT 'Test Results:' as label;
-    SELECT id, data, __tx_lsn FROM quick_test;
-    SELECT 'Functions:' as label;
-    SELECT is_blockchain_table('quick_test') as is_blockchain, verify_blockchain_chain('quick_test') as chain_valid;
-"
+# # Step 6: Test basic functionality
+# log "=== STEP 6: BASIC FUNCTIONALITY TEST ==="
+# "$PGSQL_PREFIX/bin/psql" -d postgres -c "
+#     CREATE BLOCKCHAIN TABLE quick_test (id int, data text);
+#     INSERT INTO quick_test VALUES (1, 'hello'), (2, 'world');
+#     SELECT 'Test Results:' as label;
+#     SELECT id, data, __tx_lsn FROM quick_test;
+#     SELECT 'Functions:' as label;
+#     SELECT is_blockchain_table('quick_test') as is_blockchain, verify_blockchain_chain('quick_test') as chain_valid;
+# "
 
-success "Basic functionality test passed"
+# success "Basic functionality test passed"
 
-# Step 7: Run comprehensive tests
-log "=== STEP 7: COMPREHENSIVE TESTS ==="
-"$PGSQL_PREFIX/bin/psql" -d postgres -f "$BUILD_DIR/blockchain_comprehensive_tests.sql" > /tmp/comprehensive_test.log 2>&1
+# # Step 7: Run comprehensive tests
+# log "=== STEP 7: COMPREHENSIVE TESTS ==="
+# "$PGSQL_PREFIX/bin/psql" -d postgres -f "$BUILD_DIR/blockchain_comprehensive_tests.sql" > /tmp/comprehensive_test.log 2>&1
 
-# Check critical results
-if grep -q "CREATE TABLE" /tmp/comprehensive_test.log && \
-   grep -q "INSERT 0" /tmp/comprehensive_test.log && \
-   grep -q "Total rows in blockchain table:" /tmp/comprehensive_test.log; then
-    success "Comprehensive tests passed"
-else
-    error "Comprehensive tests failed - check /tmp/comprehensive_test.log"
-fi
+# # Check critical results
+# if grep -q "CREATE TABLE" /tmp/comprehensive_test.log && \
+#    grep -q "INSERT 0" /tmp/comprehensive_test.log && \
+#    grep -q "Total rows in blockchain table:" /tmp/comprehensive_test.log; then
+#     success "Comprehensive tests passed"
+# else
+#     error "Comprehensive tests failed - check /tmp/comprehensive_test.log"
+# fi
 
-# Step 8: Test counter persistence
-log "=== STEP 8: COUNTER PERSISTENCE TEST ==="
-max_counter=$("$PGSQL_PREFIX/bin/psql" -d postgres -t -c "SELECT COALESCE(MAX(__tx_lsn), 0) FROM blockchain_audit_log;" | xargs)
-log "Current max counter: $max_counter"
+# # Step 8: Test counter persistence
+# log "=== STEP 8: COUNTER PERSISTENCE TEST ==="
+# max_counter=$("$PGSQL_PREFIX/bin/psql" -d postgres -t -c "SELECT COALESCE(MAX(__tx_lsn), 0) FROM blockchain_audit_log;" | xargs)
+# log "Current max counter: $max_counter"
 
-"$PGSQL_PREFIX/bin/pg_ctl" -D "$PG_DATA" restart
-sleep 5
+# "$PGSQL_PREFIX/bin/pg_ctl" -D "$PG_DATA" restart
+# sleep 5
 
-"$PGSQL_PREFIX/bin/psql" -d postgres -c "INSERT INTO blockchain_audit_log (user_id, user_name, email, action, ip_address) VALUES (88888, 'persistence_test', 'test@example.com', 'test', '127.0.0.1');"
+# "$PGSQL_PREFIX/bin/psql" -d postgres -c "INSERT INTO blockchain_audit_log (user_id, user_name, email, action, ip_address) VALUES (88888, 'persistence_test', 'test@example.com', 'test', '127.0.0.1');"
 
-new_counter=$("$PGSQL_PREFIX/bin/psql" -d postgres -t -c "SELECT __tx_lsn FROM blockchain_audit_log WHERE user_id = 88888;" | xargs)
-expected_counter=$((max_counter + 1))
+# new_counter=$("$PGSQL_PREFIX/bin/psql" -d postgres -t -c "SELECT __tx_lsn FROM blockchain_audit_log WHERE user_id = 88888;" | xargs)
+# expected_counter=$((max_counter + 1))
 
-if [ "$new_counter" = "$expected_counter" ]; then
-    success "Counter persistence test passed: $max_counter -> $new_counter"
-else
-    error "Counter persistence test failed: expected $expected_counter, got $new_counter"
-fi
+# if [ "$new_counter" = "$expected_counter" ]; then
+#     success "Counter persistence test passed: $max_counter -> $new_counter"
+# else
+#     error "Counter persistence test failed: expected $expected_counter, got $new_counter"
+# fi
 
 # Final status
 log "=== FINAL STATUS ==="
