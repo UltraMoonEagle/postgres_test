@@ -1,0 +1,1 @@
+INSERT INTO blockchain_stress (thread_id, iteration, random_data) VALUES (:client_id, :scale, 'pgbench_test_' || md5(random()::text));
