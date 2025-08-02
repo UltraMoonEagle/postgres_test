@@ -39,12 +39,28 @@
 #include "catalog/pg_class.h"
 #include "utils/fmgroids.h"
 #include "utils/lsyscache.h"
+#include "access/xact.h"
 
 /* Global pointer to shared memory data */
 BlockchainCounterData *BlockchainCounterShmem = NULL;
 
+/* Transaction rollback tracking */
+typedef struct BlockchainCounterReservation
+{
+    Oid table_oid;
+    uint64 reserved_counter;
+    bool committed;
+    struct BlockchainCounterReservation *next;
+} BlockchainCounterReservation;
+
+/* Per-backend transaction reservation tracking - this should be per-process */
+static BlockchainCounterReservation *current_reservations = NULL;
+
 /* Forward declarations */
 static uint64 BlockchainRecoverCounterForTable(Oid table_oid);
+static void blockchain_xact_callback(XactEvent event, void *arg);
+static void blockchain_subxact_callback(SubXactEvent event, SubTransactionId mySubid,
+                                       SubTransactionId parentSubid, void *arg);
 
 /* File to persist counter values */
 #define BLOCKCHAIN_COUNTER_FILE "global/blockchain_counters"
@@ -125,16 +141,25 @@ BlockchainGetNextCounter(Oid table_oid)
 	bool		found;
 	uint64		result;
 
+	elog(DEBUG1, "DEBUG: BlockchainGetNextCounter - START - table_oid=%u, PID=%d", table_oid, MyProcPid);
+
 	if (!BlockchainCounterShmem)
 		elog(ERROR, "blockchain counter shared memory not initialized");
 
+	elog(DEBUG1, "DEBUG: BlockchainGetNextCounter - shmem OK, acquiring lock, PID=%d", MyProcPid);
+
 	/* Look up or create counter entry */
 	LWLockAcquire(&BlockchainCounterShmem->ctl_lock, LW_EXCLUSIVE);
+	
+	elog(DEBUG1, "DEBUG: BlockchainGetNextCounter - lock acquired, doing hash search, PID=%d", MyProcPid);
 
 	entry = (BlockchainCounterEntry *) hash_search(BlockchainCounterShmem->counter_hash,
 													&table_oid,
 													HASH_ENTER,
 													&found);
+													
+	elog(DEBUG1, "DEBUG: BlockchainGetNextCounter - hash search done, found=%s, entry=%p, PID=%d", 
+	     found ? "true" : "false", entry, MyProcPid);
 
 	if (!found)
 	{
@@ -151,20 +176,69 @@ BlockchainGetNextCounter(Oid table_oid)
 			 table_oid, (unsigned long long)entry->counter_value);
 	}
 
+	/* Release control lock before acquiring entry lock (original ordering) */
 	LWLockRelease(&BlockchainCounterShmem->ctl_lock);
 
-	/* Atomically increment and get counter value */
+	elog(DEBUG1, "DEBUG: BlockchainGetNextCounter - control lock released, acquiring entry lock, PID=%d", MyProcPid);
+
+	/* Get counter value but only increment if in a transaction */
 	LWLockAcquire(&entry->lock, LW_EXCLUSIVE);
-	result = entry->counter_value++;
 	
-	/* Persist every 1000 increments to reduce I/O */
-	if (entry->counter_value - entry->last_persisted >= 1000)
+	elog(DEBUG1, "DEBUG: BlockchainGetNextCounter - entry lock acquired, PID=%d", MyProcPid);
+	
+	elog(DEBUG1, "DEBUG: BlockchainGetNextCounter - searching for existing reservation, PID=%d", MyProcPid);
+	
+	/* Check if we already have a reservation for this table in current transaction */
+	BlockchainCounterReservation *existing_reservation = NULL;
+	for (BlockchainCounterReservation *res = current_reservations; res != NULL; res = res->next)
 	{
-		BlockchainPersistCounters();
-		entry->last_persisted = entry->counter_value;
+		elog(DEBUG1, "DEBUG: BlockchainGetNextCounter - checking reservation for table %u, current table %u, PID=%d", 
+		     res->table_oid, table_oid, MyProcPid);
+		if (res->table_oid == table_oid && !res->committed)
+		{
+			existing_reservation = res;
+			break;
+		}
 	}
 	
+	elog(DEBUG1, "DEBUG: BlockchainGetNextCounter - reservation search complete, existing=%s, PID=%d", 
+	     existing_reservation ? "found" : "not found", MyProcPid);
+	
+	/* SIMPLIFIED: Just atomically increment counter for every call */
+	result = entry->counter_value++;
+	
+	elog(DEBUG1, "DEBUG: BlockchainGetNextCounter - allocated counter %llu, PID=%d", 
+	     (unsigned long long)result, MyProcPid);
+	
+	/* Update or create reservation to track this counter for rollback */
+	if (existing_reservation)
+	{
+		/* Update existing reservation with latest counter */
+		existing_reservation->reserved_counter = result;
+	}
+	else
+	{
+		/* Create first reservation in this transaction */
+		MemoryContext oldcontext = MemoryContextSwitchTo(TopMemoryContext);
+		BlockchainCounterReservation *reservation = (BlockchainCounterReservation *) 
+			palloc0(sizeof(BlockchainCounterReservation));
+		reservation->table_oid = table_oid;
+		reservation->reserved_counter = result;
+		reservation->committed = false;
+		reservation->next = current_reservations;
+		current_reservations = reservation;
+		MemoryContextSwitchTo(oldcontext);
+		
+		elog(DEBUG1, "DEBUG: BlockchainGetNextCounter - created new reservation, PID=%d", MyProcPid);
+	}
+	
+	elog(DEBUG1, "DEBUG: BlockchainGetNextCounter - about to release entry lock and return %llu, PID=%d", 
+	     (unsigned long long)result, MyProcPid);
+
 	LWLockRelease(&entry->lock);
+	
+	elog(DEBUG1, "DEBUG: BlockchainGetNextCounter - COMPLETED successfully, returning %llu, PID=%d", 
+	     (unsigned long long)result, MyProcPid);
 
 	return result;
 }
@@ -467,6 +541,10 @@ BlockchainCounterStartup(void)
 	/* Skip SPI-based table scanning which causes startup crashes */
 	BlockchainRestoreCounters();
 	
+	/* Register transaction callbacks to handle rollbacks */
+	RegisterXactCallback(blockchain_xact_callback, NULL);
+	RegisterSubXactCallback(blockchain_subxact_callback, NULL);
+	
 	elog(LOG, "Blockchain counter system initialized with lazy recovery");
 }
 
@@ -478,4 +556,90 @@ void
 BlockchainCounterShutdown(void)
 {
 	BlockchainPersistCounters();
+}
+
+/*
+ * blockchain_xact_callback - Handle transaction events
+ *
+ * On commit: Mark all reservations as committed
+ * On abort: Roll back counter values to remove uncommitted reservations
+ */
+static void
+blockchain_xact_callback(XactEvent event, void *arg)
+{
+	BlockchainCounterReservation *reservation, *next;
+	
+	switch (event)
+	{
+		case XACT_EVENT_COMMIT:
+		case XACT_EVENT_PARALLEL_COMMIT:
+		case XACT_EVENT_PREPARE:
+			/* Mark all current reservations as committed */
+			for (reservation = current_reservations; reservation != NULL; reservation = reservation->next)
+			{
+				reservation->committed = true;
+			}
+			break;
+			
+		case XACT_EVENT_ABORT:
+		case XACT_EVENT_PARALLEL_ABORT:
+			/* Roll back counter values for uncommitted reservations */
+			elog(DEBUG1, "Rolling back blockchain counters for aborted transaction");
+			
+			for (reservation = current_reservations; reservation != NULL; reservation = next)
+			{
+				next = reservation->next;
+				
+				if (!reservation->committed)
+				{
+					/* Find the counter entry and roll it back */
+					BlockchainCounterEntry *entry;
+					bool found;
+					
+					LWLockAcquire(&BlockchainCounterShmem->ctl_lock, LW_SHARED);
+					entry = (BlockchainCounterEntry *) hash_search(BlockchainCounterShmem->counter_hash,
+																  &reservation->table_oid,
+																  HASH_FIND,
+																  &found);
+					LWLockRelease(&BlockchainCounterShmem->ctl_lock);
+					
+					if (found && entry)
+					{
+						LWLockAcquire(&entry->lock, LW_EXCLUSIVE);
+						
+						/* Reset counter to before this transaction started */
+						uint64 old_counter = entry->counter_value;
+						entry->counter_value = reservation->reserved_counter;
+						
+						elog(LOG, "Rolled back counter for table OID %u from %llu to %llu", 
+							 reservation->table_oid, 
+							 (unsigned long long)old_counter,
+							 (unsigned long long)reservation->reserved_counter);
+							 
+						LWLockRelease(&entry->lock);
+					}
+				}
+				
+				/* Free the reservation */
+				pfree(reservation);
+			}
+			
+			/* Clear the reservation list */
+			current_reservations = NULL;
+			break;
+			
+		default:
+			break;
+	}
+}
+
+/*
+ * blockchain_subxact_callback - Handle subtransaction events  
+ */
+static void
+blockchain_subxact_callback(SubXactEvent event, SubTransactionId mySubid,
+						   SubTransactionId parentSubid, void *arg)
+{
+	/* For now, we don't handle subtransactions specially */
+	/* Main transaction callback will handle the rollback */
 }

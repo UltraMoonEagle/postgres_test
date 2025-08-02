@@ -35,6 +35,7 @@
 #include "access/transam.h"
 #include "access/xact.h"
 #include "catalog/namespace.h"
+#include "catalog/pg_class.h"
 #include "catalog/pg_database.h"
 #include "catalog/pg_inherits.h"
 #include "commands/cluster.h"
@@ -1679,7 +1680,8 @@ vac_update_datfrozenxid(void)
 		 */
 		if (classForm->relkind != RELKIND_RELATION &&
 			classForm->relkind != RELKIND_MATVIEW &&
-			classForm->relkind != RELKIND_TOASTVALUE)
+			classForm->relkind != RELKIND_TOASTVALUE &&
+			classForm->relkind != RELKIND_BLOCKCHAIN_TABLE)
 		{
 			Assert(!TransactionIdIsValid(relfrozenxid));
 			Assert(!MultiXactIdIsValid(relminmxid));
@@ -2112,7 +2114,8 @@ vacuum_rel(Oid relid, RangeVar *relation, VacuumParams *params,
 	if (rel->rd_rel->relkind != RELKIND_RELATION &&
 		rel->rd_rel->relkind != RELKIND_MATVIEW &&
 		rel->rd_rel->relkind != RELKIND_TOASTVALUE &&
-		rel->rd_rel->relkind != RELKIND_PARTITIONED_TABLE)
+		rel->rd_rel->relkind != RELKIND_PARTITIONED_TABLE &&
+		rel->rd_rel->relkind != RELKIND_BLOCKCHAIN_TABLE)
 	{
 		ereport(WARNING,
 				(errmsg("skipping \"%s\" --- cannot vacuum non-tables or special system tables",
@@ -2259,6 +2262,16 @@ vacuum_rel(Oid relid, RangeVar *relation, VacuumParams *params,
 		 */
 		if (params->options & VACOPT_FULL)
 		{
+			/* Check if this is a blockchain table - VACUUM FULL not supported */
+			if (rel->rd_rel->relkind == RELKIND_BLOCKCHAIN_TABLE)
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("VACUUM FULL is not supported on blockchain tables"),
+						 errdetail("Blockchain tables are immutable and append-only."),
+						 errhint("Use regular VACUUM instead, which will be bypassed for blockchain tables.")));
+			}
+
 			ClusterParams cluster_params = {0};
 
 			if ((params->options & VACOPT_VERBOSE) != 0)

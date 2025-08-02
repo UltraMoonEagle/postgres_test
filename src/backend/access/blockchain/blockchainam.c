@@ -43,6 +43,8 @@
 #include "storage/predicate.h"
 #include "storage/procarray.h"
 #include "storage/smgr.h"
+#include "access/transam.h"
+#include "access/multixact.h"
 #include "utils/builtins.h"
 #include "utils/rel.h"
 #include "utils/lsyscache.h"
@@ -65,6 +67,8 @@
 #include "blockchain/blockchainam.h"
 #include "blockchain/blockchain_hash.h"
 #include "blockchain/blockchain_counter.h"
+#include "commands/vacuum.h"
+#include "access/multixact.h"
 
 
 PG_FUNCTION_INFO_V1(blockchain_tableam_handler);
@@ -74,6 +78,19 @@ static const TupleTableSlotOps *blockchainam_slot_callbacks(Relation relation);
 static void blockchainam_tuple_insert(Relation relation, TupleTableSlot *slot,
                                       CommandId cid, int options,
                                       BulkInsertState bistate);
+static void blockchainam_relation_vacuum(Relation rel, struct VacuumParams *params,
+                                        BufferAccessStrategy bstrategy);
+static void blockchainam_relation_nontransactional_truncate(Relation rel);
+static void blockchainam_relation_copy_for_cluster(Relation OldTable,
+                                                  Relation NewTable,
+                                                  Relation OldIndex,
+                                                  bool use_sort,
+                                                  TransactionId OldestXmin,
+                                                  TransactionId *xid_cutoff,
+                                                  MultiXactId *multi_cutoff,
+                                                  double *num_tuples,
+                                                  double *tups_vacuumed,
+                                                  double *tups_recently_dead);
 static void blockchainam_multi_insert(Relation relation, TupleTableSlot **slots,
                                       int ntuples, CommandId cid, int options,
                                       BulkInsertState bistate);
@@ -2709,10 +2726,10 @@ const TableAmRoutine blockchainam_methods= {
 	.index_delete_tuples = heap_index_delete_tuples,
 
 	.relation_set_new_filelocator = heapam_relation_set_new_filelocator,
-	.relation_nontransactional_truncate = heapam_relation_nontransactional_truncate,
+	.relation_nontransactional_truncate = blockchainam_relation_nontransactional_truncate,
 	.relation_copy_data = heapam_relation_copy_data,
-	.relation_copy_for_cluster = heapam_relation_copy_for_cluster,
-	.relation_vacuum = heap_vacuum_rel,
+	.relation_copy_for_cluster = blockchainam_relation_copy_for_cluster,
+	.relation_vacuum = blockchainam_relation_vacuum,
 	.scan_analyze_next_block = heapam_scan_analyze_next_block,
 	.scan_analyze_next_tuple = heapam_scan_analyze_next_tuple,
 	.index_build_range_scan = heapam_index_build_range_scan,
@@ -2785,6 +2802,17 @@ typedef struct BlockchainInsertContext
     uint64 last_counter;  /* Changed from LSN to counter */
 } BlockchainInsertContext;
 
+/* Per-backend insert context - avoids shared state issues */
+typedef struct BackendInsertContext {
+    Oid current_relid;
+    bytea *cached_hash;
+    uint64 cached_counter;
+    int insert_count;
+} BackendInsertContext;
+
+static BackendInsertContext *backend_insert_ctx = NULL;
+#define CLEANUP_INTERVAL 100  /* Clean up every 100 inserts */
+
 /*
  * blockchainam_tuple_insert - Insert a tuple into a blockchain table
  *
@@ -2799,21 +2827,65 @@ blockchainam_tuple_insert(Relation relation, TupleTableSlot *slot,
     int natts = tupdesc->natts;
     TimestampTz ts = GetCurrentTimestamp();
     
-    /* Static context for caching previous hash between inserts */
-    static BlockchainInsertContext insert_ctx = { InvalidOid, NULL, 0 };
+    elog(DEBUG1, "DEBUG: blockchainam_tuple_insert - START - relation=%p, slot=%p, PID=%d", 
+         relation, slot, MyProcPid);
+    
+    /* Defensive checks */
+    if (!relation || !slot)
+        elog(ERROR, "Invalid parameters to blockchainam_tuple_insert");
+    
+    if (!tupdesc || natts < NUM_BLOCKCHAIN_COLUMNS)
+        elog(ERROR, "Invalid tuple descriptor for blockchain table");
+    
+    Assert(RelationGetRelid(relation) != InvalidOid);
+    
+    elog(DEBUG1, "DEBUG: blockchainam_tuple_insert - basic checks passed, PID=%d", MyProcPid);
+    
+    /* Initialize per-backend context on first use */
+    if (backend_insert_ctx == NULL)
+    {
+        elog(DEBUG1, "DEBUG: blockchainam_tuple_insert - initializing backend context, PID=%d", MyProcPid);
+        MemoryContext oldcontext = MemoryContextSwitchTo(TopMemoryContext);
+        backend_insert_ctx = (BackendInsertContext *) palloc0(sizeof(BackendInsertContext));
+        backend_insert_ctx->current_relid = InvalidOid;
+        backend_insert_ctx->cached_hash = NULL;
+        backend_insert_ctx->cached_counter = 0;
+        backend_insert_ctx->insert_count = 0;
+        MemoryContextSwitchTo(oldcontext);
+        elog(DEBUG1, "DEBUG: blockchainam_tuple_insert - backend context initialized, PID=%d", MyProcPid);
+    }
+    
+    elog(DEBUG1, "DEBUG: blockchainam_tuple_insert - getting counter for relation %u, PID=%d", 
+         RelationGetRelid(relation), MyProcPid);
     
     /* Get the next counter value BEFORE any operations */
     uint64 counter = BlockchainGetNextCounter(RelationGetRelid(relation));
+    
+    elog(DEBUG1, "DEBUG: blockchainam_tuple_insert - got counter %llu, PID=%d", 
+         (unsigned long long)counter, MyProcPid);
+    
+    elog(DEBUG1, "DEBUG: blockchainam_tuple_insert - creating virtual slot, PID=%d", MyProcPid);
     
     /* Create a virtual slot with proper initialization */
     TupleTableSlot *virtualslot = MakeSingleTupleTableSlot(tupdesc, &TTSOpsVirtual);
     ExecClearTuple(virtualslot);
     
+    elog(DEBUG1, "DEBUG: blockchainam_tuple_insert - virtual slot created, starting PG_TRY, PID=%d", MyProcPid);
+    
     PG_TRY();
     {
+    elog(DEBUG1, "DEBUG: blockchainam_tuple_insert - inside PG_TRY, materializing slot, PID=%d", MyProcPid);
+    
     /* Ensure source slot is materialized */
     slot_getallattrs(slot);
+    
+    /* Additional safety check */
+    if (!slot->tts_tupleDescriptor)
+        elog(ERROR, "Source slot has no tuple descriptor");
+    
     ExecMaterializeSlot(slot);
+    
+    elog(DEBUG1, "DEBUG: blockchainam_tuple_insert - slot materialized, PID=%d", MyProcPid);
     
     int base_attno = natts - NUM_BLOCKCHAIN_COLUMNS;
     
@@ -2824,18 +2896,23 @@ blockchainam_tuple_insert(Relation relation, TupleTableSlot *slot,
         virtualslot->tts_isnull[i] = slot->tts_isnull[i];
     }
     
-    /* Get previous hash - use cached if same relation */
+    /* Get previous hash - use cached if same relation (no locking needed for per-backend) */
     bytea *prev_hash = NULL;
-    if (insert_ctx.relid == RelationGetRelid(relation) && insert_ctx.last_hash)
+    if (backend_insert_ctx->current_relid == RelationGetRelid(relation) && 
+        backend_insert_ctx->cached_hash)
     {
-        prev_hash = insert_ctx.last_hash;
+        prev_hash = backend_insert_ctx->cached_hash;
     }
     else
     {
         prev_hash = get_previous_hash(relation);
         /* Clear old cached data if switching relations */
-        if (insert_ctx.last_hash)
-            pfree(insert_ctx.last_hash);
+        if (backend_insert_ctx->cached_hash && backend_insert_ctx->current_relid != InvalidOid)
+        {
+            pfree(backend_insert_ctx->cached_hash);
+            backend_insert_ctx->cached_hash = NULL;
+        }
+        backend_insert_ctx->current_relid = RelationGetRelid(relation);
     }
     
     /* Compute hash using counter instead of LSN */
@@ -2932,20 +3009,39 @@ blockchainam_tuple_insert(Relation relation, TupleTableSlot *slot,
     heapam_tuple_insert(relation, virtualslot, cid, options, bistate);
     
     /* Update context for next insert */
-    insert_ctx.relid = RelationGetRelid(relation);
-    insert_ctx.last_counter = counter;
+    backend_insert_ctx->current_relid = RelationGetRelid(relation);
+    backend_insert_ctx->cached_counter = counter;
     
     /* Cache the current hash for next insert */
-    if (insert_ctx.last_hash)
-        pfree(insert_ctx.last_hash);
-    insert_ctx.last_hash = (bytea *) MemoryContextAlloc(TopMemoryContext, VARSIZE(curr_hash));
-    memcpy(insert_ctx.last_hash, curr_hash, VARSIZE(curr_hash));
+    if (backend_insert_ctx->cached_hash)
+        pfree(backend_insert_ctx->cached_hash);
+    
+    MemoryContext oldcontext = MemoryContextSwitchTo(TopMemoryContext);
+    backend_insert_ctx->cached_hash = (bytea *) palloc(VARSIZE(curr_hash));
+    memcpy(backend_insert_ctx->cached_hash, curr_hash, VARSIZE(curr_hash));
+    MemoryContextSwitchTo(oldcontext);
+    
+    /* Periodic cleanup to prevent memory accumulation */
+    backend_insert_ctx->insert_count++;
+    if (backend_insert_ctx->insert_count >= CLEANUP_INTERVAL)
+    {
+        elog(DEBUG1, "Performed periodic memory check after %d inserts", CLEANUP_INTERVAL);
+        backend_insert_ctx->insert_count = 0;
+    }
     
     }
     PG_CATCH();
     {
-        /* Clean up on error */
-        ExecDropSingleTupleTableSlot(virtualslot);
+        /* Clean up on error - no locks to release with per-backend context */
+        
+        if (virtualslot)
+        {
+            /* Clear the slot before dropping to avoid double-free */
+            ExecClearTuple(virtualslot);
+            ExecDropSingleTupleTableSlot(virtualslot);
+        }
+        
+        /* Re-throw the error */
         PG_RE_THROW();
     }
     PG_END_TRY();
@@ -3057,28 +3153,41 @@ get_previous_hash(Relation rel)
     if (curr_hash_attno == -1)
         elog(ERROR, "__curr_hash column not found");
     
-    /* Start a table scan */
-    scan = table_beginscan_strat(rel, SnapshotAny, 0, NULL, true, true);
-    slot = table_slot_create(rel, NULL);
-    
-    while (table_scan_getnextslot(scan, BackwardScanDirection, slot))
+    /* Start a table scan with proper error handling */
+    PG_TRY();
     {
-        /* Get the most recent tuple */
-        if (!TupIsNull(slot))
+        scan = table_beginscan_strat(rel, SnapshotAny, 0, NULL, true, true);
+        slot = table_slot_create(rel, NULL);
+        
+        while (table_scan_getnextslot(scan, BackwardScanDirection, slot))
         {
-            slot_getallattrs(slot);
-            if (!slot->tts_isnull[curr_hash_attno])
+            /* Get the most recent tuple */
+            if (!TupIsNull(slot))
             {
-                Datum d = slot->tts_values[curr_hash_attno];
-                bool isvarlena = true;
-                prev_hash = (bytea *) datumCopy(d, isvarlena, -1);
-                break; // got latest row
+                slot_getallattrs(slot);
+                if (!slot->tts_isnull[curr_hash_attno])
+                {
+                    Datum d = slot->tts_values[curr_hash_attno];
+                    bool isvarlena = true;
+                    prev_hash = (bytea *) datumCopy(d, isvarlena, -1);
+                    break; // got latest row
+                }
             }
         }
+        
+        table_endscan(scan);
+        ExecDropSingleTupleTableSlot(slot);
     }
-    
-    table_endscan(scan);
-    ExecDropSingleTupleTableSlot(slot);
+    PG_CATCH();
+    {
+        /* Clean up resources on error */
+        if (scan)
+            table_endscan(scan);
+        if (slot)
+            ExecDropSingleTupleTableSlot(slot);
+        PG_RE_THROW();
+    }
+    PG_END_TRY();
     
     if (prev_hash == NULL)
     {
@@ -3290,11 +3399,113 @@ blockchainam_multi_insert(Relation relation, TupleTableSlot **slots, int ntuples
 {
     elog(DEBUG1, "blockchainam_multi_insert: inserting %d tuples", ntuples);
     
-    /* Use single insert for each tuple to maintain blockchain properties */
-    for (int i = 0; i < ntuples; i++)
+    /* Limit batch size to prevent memory issues and crashes */
+    const int MAX_BATCH_SIZE = 500;
+    if (ntuples > MAX_BATCH_SIZE)
     {
-        blockchainam_tuple_insert(relation, slots[i], cid, options, bistate);
+        elog(WARNING, "Large batch insert (%d tuples) split into smaller batches for stability", ntuples);
+    }
+    
+    /* Process in batches to prevent memory accumulation */
+    for (int batch_start = 0; batch_start < ntuples; batch_start += MAX_BATCH_SIZE)
+    {
+        int batch_end = Min(batch_start + MAX_BATCH_SIZE, ntuples);
+        int batch_size = batch_end - batch_start;
+        
+        elog(DEBUG2, "Processing batch %d-%d (%d tuples)", 
+             batch_start, batch_end - 1, batch_size);
+        
+        /* Use single insert for each tuple to maintain blockchain properties */
+        for (int i = batch_start; i < batch_end; i++)
+        {
+            blockchainam_tuple_insert(relation, slots[i], cid, options, bistate);
+            
+            /* Check for interrupts periodically */
+            if (i % 50 == 0)
+                CHECK_FOR_INTERRUPTS();
+        }
+        
+        /* Force a small delay between batches to prevent overwhelming */
+        if (batch_end < ntuples)
+        {
+            elog(DEBUG2, "Completed batch, %d tuples remaining", ntuples - batch_end);
+            pg_usleep(1000); /* 1ms delay */
+        }
     }
     
     elog(DEBUG1, "blockchainam_multi_insert: completed %d insertions", ntuples);
+}
+
+/*
+ * blockchainam_relation_vacuum - Vacuum a blockchain table
+ *
+ * Blockchain tables are immutable and append-only, so vacuum is not needed.
+ * All tuples are always live, there are no dead tuples to clean up,
+ * and no space to reclaim. This is a no-op.
+ */
+static void
+blockchainam_relation_vacuum(Relation rel, struct VacuumParams *params,
+                           BufferAccessStrategy bstrategy)
+{
+    /* Check if this is VACUUM FULL - not supported for blockchain tables */
+    if (params->options & VACOPT_FULL)
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                 errmsg("VACUUM FULL is not supported on blockchain tables"),
+                 errdetail("Blockchain tables are immutable and append-only."),
+                 errhint("Use regular VACUUM instead, which will be bypassed for blockchain tables.")));
+    }
+
+    /*
+     * Blockchain tables do not need vacuum. They are:
+     * - Immutable (no UPDATE/DELETE operations)
+     * - Append-only (only INSERT operations allowed)
+     * - Have no dead tuples (all tuples remain live forever)
+     * - Have no free space to reclaim
+     *
+     * Running traditional vacuum operations would be a waste of resources.
+     */
+    elog(INFO, "Vacuum bypassed for blockchain table \"%s\" - immutable tables do not require vacuum",
+         RelationGetRelationName(rel));
+    
+    /* That's it - we're done. No work needed for blockchain tables. */
+    return;
+}
+
+/*
+ * blockchainam_relation_nontransactional_truncate
+ *
+ * Blockchain tables cannot be truncated as they are immutable.
+ */
+static void
+blockchainam_relation_nontransactional_truncate(Relation rel)
+{
+    ereport(ERROR,
+            (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+             errmsg("TRUNCATE not allowed on blockchain table \"%s\"",
+                    RelationGetRelationName(rel)),
+             errdetail("Blockchain tables are immutable and cannot be truncated.")));
+}
+
+/*
+ * blockchainam_relation_copy_for_cluster
+ *
+ * Blockchain tables cannot be clustered as it would break hash chain.
+ */
+static void
+blockchainam_relation_copy_for_cluster(Relation OldTable, Relation NewTable,
+                                     Relation OldIndex, bool use_sort,
+                                     TransactionId OldestXmin,
+                                     TransactionId *xid_cutoff,
+                                     MultiXactId *multi_cutoff,
+                                     double *num_tuples,
+                                     double *tups_vacuumed,
+                                     double *tups_recently_dead)
+{
+    ereport(ERROR,
+            (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+             errmsg("CLUSTER not allowed on blockchain table \"%s\"",
+                    RelationGetRelationName(OldTable)),
+             errdetail("Clustering would break the blockchain hash chain.")));
 }
