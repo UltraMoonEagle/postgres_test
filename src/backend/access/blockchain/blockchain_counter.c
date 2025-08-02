@@ -49,6 +49,7 @@ typedef struct BlockchainCounterReservation
 {
     Oid table_oid;
     uint64 reserved_counter;
+    uint64 previous_counter;  /* Counter value before this reservation */
     bool committed;
     struct BlockchainCounterReservation *next;
 } BlockchainCounterReservation;
@@ -188,14 +189,18 @@ BlockchainGetNextCounter(Oid table_oid)
 	elog(DEBUG1, "DEBUG: BlockchainGetNextCounter - entry lock acquired, entry=%p, counter_value=%llu, PID=%d", 
 	     entry, (unsigned long long)entry->counter_value, MyProcPid);
 	
-	/* ULTRA-SIMPLIFIED: Just atomically increment counter - no reservations for now */
-	uint64 old_value = entry->counter_value;
+	/* BLOCKCHAIN IMMUTABILITY: Simple counter increment with NO rollback
+	 * 
+	 * For blockchain systems, counter gaps from failed transactions are CORRECT behavior:
+	 * 1. Maintains immutability - failed attempts should leave traces
+	 * 2. Avoids dangerous race conditions in concurrent rollback scenarios  
+	 * 3. Follows precedent of Bitcoin/Ethereum nonce handling
+	 * 4. Simpler, faster, and safer than complex reservation systems
+	 */
 	result = entry->counter_value++;
-	uint64 new_value = entry->counter_value;
 	
-	elog(LOG, "COUNTER INCREMENT: table_oid=%u, entry=%p, old=%llu, result=%llu, new=%llu, PID=%d", 
-	     table_oid, entry, (unsigned long long)old_value, (unsigned long long)result, 
-	     (unsigned long long)new_value, MyProcPid);
+	elog(LOG, "BLOCKCHAIN COUNTER: table_oid=%u, counter=%llu, PID=%d", 
+	     table_oid, (unsigned long long)result, MyProcPid);
 	
 	elog(DEBUG1, "DEBUG: BlockchainGetNextCounter - about to release entry lock and return %llu, PID=%d", 
 	     (unsigned long long)result, MyProcPid);
@@ -506,9 +511,11 @@ BlockchainCounterStartup(void)
 	/* Skip SPI-based table scanning which causes startup crashes */
 	BlockchainRestoreCounters();
 	
-	/* TEMPORARILY DISABLED: Register transaction callbacks to handle rollbacks */
-	/* RegisterXactCallback(blockchain_xact_callback, NULL);
-	RegisterSubXactCallback(blockchain_subxact_callback, NULL); */
+	/* Register transaction callbacks to handle rollbacks 
+	 * NOTE: The actual rollback logic is disabled to maintain counter gaps
+	 */
+	RegisterXactCallback(blockchain_xact_callback, NULL);
+	RegisterSubXactCallback(blockchain_subxact_callback, NULL);
 	
 	elog(LOG, "Blockchain counter system initialized with lazy recovery");
 }
@@ -548,44 +555,22 @@ blockchain_xact_callback(XactEvent event, void *arg)
 			
 		case XACT_EVENT_ABORT:
 		case XACT_EVENT_PARALLEL_ABORT:
-			/* Roll back counter values for uncommitted reservations */
-			elog(DEBUG1, "Rolling back blockchain counters for aborted transaction");
+			/* DO NOT roll back counter values - maintain immutability
+			 * 
+			 * For blockchain systems, counter gaps from failed transactions are correct:
+			 * - Preserves audit trail of all access attempts
+			 * - Prevents dangerous race conditions with concurrent transactions
+			 * - Maintains blockchain immutability principles
+			 */
+			elog(LOG, "Transaction aborted - counter gaps are intentional for blockchain immutability");
 			
 			for (reservation = current_reservations; reservation != NULL; reservation = next)
 			{
 				next = reservation->next;
 				
-				if (!reservation->committed)
-				{
-					/* Find the counter entry and roll it back */
-					BlockchainCounterEntry *entry;
-					bool found;
-					
-					LWLockAcquire(&BlockchainCounterShmem->ctl_lock, LW_SHARED);
-					entry = (BlockchainCounterEntry *) hash_search(BlockchainCounterShmem->counter_hash,
-																  &reservation->table_oid,
-																  HASH_FIND,
-																  &found);
-					LWLockRelease(&BlockchainCounterShmem->ctl_lock);
-					
-					if (found && entry)
-					{
-						LWLockAcquire(&entry->lock, LW_EXCLUSIVE);
-						
-						/* Reset counter to before this transaction started */
-						uint64 old_counter = entry->counter_value;
-						entry->counter_value = reservation->reserved_counter;
-						
-						elog(LOG, "Rolled back counter for table OID %u from %llu to %llu", 
-							 reservation->table_oid, 
-							 (unsigned long long)old_counter,
-							 (unsigned long long)reservation->reserved_counter);
-							 
-						LWLockRelease(&entry->lock);
-					}
-				}
-				
-				/* Free the reservation */
+				/* Simply free the reservation without rolling back */
+				elog(DEBUG1, "Cleaned up reservation for table OID %u, counter %llu (NOT rolled back)", 
+					 reservation->table_oid, (unsigned long long)reservation->reserved_counter);
 				pfree(reservation);
 			}
 			
