@@ -15,7 +15,7 @@
 -- ============================================================================
 
 -- Simple SQL-only version of is_blockchain_table for bootstrap
-CREATE OR REPLACE FUNCTION is_blockchain_table_simple(table_name text)
+CREATE OR REPLACE FUNCTION is_blockchain_table(table_name text)
 RETURNS boolean
 LANGUAGE SQL
 AS $$
