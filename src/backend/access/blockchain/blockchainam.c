@@ -49,6 +49,7 @@
 #include "utils/rel.h"
 #include "utils/lsyscache.h"
 #include "utils/varlena.h"
+#include "executor/spi.h"
 #include "catalog/pg_attribute.h"
 #include "catalog/heap.h"
 
@@ -114,6 +115,21 @@ static void blockchainam_tuple_complete_speculative(Relation relation,
                                                     TupleTableSlot *slot,
                                                     uint32 specToken,
                                                     bool succeeded);
+
+/* Blockchain-specific implementations to block dangerous operations */
+static TM_Result blockchainam_tuple_lock(Relation relation, ItemPointer tid,
+                                        Snapshot snapshot, TupleTableSlot *slot,
+                                        CommandId cid, LockTupleMode mode,
+                                        LockWaitPolicy wait_policy, uint8 flags,
+                                        TM_FailureData *tmfd);
+static bool blockchainam_fetch_row_version(Relation relation,
+                                          ItemPointer tid,
+                                          Snapshot snapshot,
+                                          TupleTableSlot *slot);
+static void blockchainam_get_latest_tid(TableScanDesc sscan,
+                                       ItemPointer tid);
+static TransactionId blockchainam_index_delete_tuples(Relation rel,
+                                                     TM_IndexDeleteOp *delstate);
 
 static void reform_and_rewrite_tuple(HeapTuple tuple,
 									 Relation OldHeap, Relation NewHeap,
@@ -2716,14 +2732,14 @@ const TableAmRoutine blockchainam_methods= {
     .multi_insert = blockchainam_multi_insert,
     .tuple_delete = blockchainam_tuple_delete,
     .tuple_update = blockchainam_tuple_update,
-    .tuple_lock = heapam_tuple_lock,
+    .tuple_lock = blockchainam_tuple_lock,
 
 
-	.tuple_fetch_row_version = heapam_fetch_row_version,
-	.tuple_get_latest_tid = heap_get_latest_tid,
+	.tuple_fetch_row_version = blockchainam_fetch_row_version,
+	.tuple_get_latest_tid = blockchainam_get_latest_tid,
 	.tuple_tid_valid = heapam_tuple_tid_valid,
 	.tuple_satisfies_snapshot = heapam_tuple_satisfies_snapshot,
-	.index_delete_tuples = heap_index_delete_tuples,
+	.index_delete_tuples = blockchainam_index_delete_tuples,
 
 	.relation_set_new_filelocator = heapam_relation_set_new_filelocator,
 	.relation_nontransactional_truncate = blockchainam_relation_nontransactional_truncate,
@@ -2791,6 +2807,66 @@ blockchainam_tuple_delete(Relation rel, ItemPointer tid,
 	return TM_Ok;
 }
 
+/* 
+ * Blockchain-specific implementations to block dangerous operations
+ * These functions prevent operations that could violate blockchain immutability
+ */
+
+/* Block row locking - blockchain tables are immutable so locking makes no sense */
+static TM_Result
+blockchainam_tuple_lock(Relation relation, ItemPointer tid,
+                       Snapshot snapshot, TupleTableSlot *slot,
+                       CommandId cid, LockTupleMode mode,
+                       LockWaitPolicy wait_policy, uint8 flags,
+                       TM_FailureData *tmfd)
+{
+    ereport(ERROR,
+            (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+             errmsg("row locking not supported on blockchain table \"%s\"",
+                    RelationGetRelationName(relation)),
+             errdetail("Blockchain tables are immutable and do not support row locking."),
+             errhint("Remove FOR UPDATE/FOR SHARE clauses when querying blockchain tables.")));
+    return TM_Ok;  /* Never reached */
+}
+
+/* Block row version fetching - blockchain tables don't have row versions */
+static bool
+blockchainam_fetch_row_version(Relation relation,
+                              ItemPointer tid,
+                              Snapshot snapshot,
+                              TupleTableSlot *slot)
+{
+    ereport(ERROR,
+            (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+             errmsg("row version fetching not supported on blockchain table \"%s\"",
+                    RelationGetRelationName(relation)),
+             errdetail("Blockchain tables are immutable and do not have row versions.")));
+    return false;  /* Never reached */
+}
+
+/* Block latest TID operations - blockchain tables don't have update chains */
+static void
+blockchainam_get_latest_tid(TableScanDesc sscan, ItemPointer tid)
+{
+    ereport(ERROR,
+            (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+             errmsg("latest TID operations not supported on blockchain table \"%s\"",
+                    RelationGetRelationName(sscan->rs_rd)),
+             errdetail("Blockchain tables are immutable and do not have update chains.")));
+}
+
+/* Block index tuple deletion - critical for blockchain integrity */
+static TransactionId
+blockchainam_index_delete_tuples(Relation rel, TM_IndexDeleteOp *delstate)
+{
+    ereport(ERROR,
+            (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+             errmsg("index tuple deletion not supported on blockchain table \"%s\"",
+                    RelationGetRelationName(rel)),
+             errdetail("Blockchain tables are immutable and index entries cannot be deleted."),
+             errhint("Blockchain table index entries must remain permanently to maintain integrity.")));
+    return InvalidTransactionId;  /* Never reached */
+}
 
 /* Insert a tuple into a blockchain table, computing hashes and timestamps */
 
@@ -3131,73 +3207,76 @@ int get_attnum_by_name(TupleDesc tupdesc, const char *name)
 bytea *
 get_previous_hash(Relation rel)
 {
-    TupleTableSlot *slot;
-    TableScanDesc scan;
     bytea *prev_hash = NULL;
-    int curr_hash_attno = -1;
-    TupleDesc desc = RelationGetDescr(rel);
+    char query[512];
+    int spi_result;
+    SPITupleTable *tuptable;
+    bool isnull;
+    Datum max_hash_datum;
+    MemoryContext oldcontext;
     
-    elog(LOG, "=== get_previous_hash START ===");
+    elog(DEBUG1, "get_previous_hash: START for relation %s", RelationGetRelationName(rel));
     
-    /* Find the attribute number of curr_hash */
-    for (int i = 0; i < desc->natts; i++)
+    /* Use SPI but with LIMIT to avoid full sort - most efficient for blockchain tables
+     * This does O(n) scan + O(1) limit rather than O(n log n) sort */
+    spi_result = SPI_connect();
+    if (spi_result != SPI_OK_CONNECT)
     {
-        Form_pg_attribute attr = TupleDescAttr(desc, i);
-        if (strcmp(NameStr(attr->attname), "__curr_hash") == 0)
-        {
-            curr_hash_attno = i;
-            break;
-        }
+        elog(ERROR, "SPI_connect failed in get_previous_hash");
     }
     
-    if (curr_hash_attno == -1)
-        elog(ERROR, "__curr_hash column not found");
-    
-    /* Start a table scan with proper error handling */
     PG_TRY();
     {
-        scan = table_beginscan_strat(rel, SnapshotAny, 0, NULL, true, true);
-        slot = table_slot_create(rel, NULL);
+        /* Query for the hash with maximum __tx_lsn
+         * Uses aggregate MAX() which is O(n) scan, not O(n log n) sort */
+        snprintf(query, sizeof(query),
+                "SELECT __curr_hash FROM %s WHERE __tx_lsn = (SELECT MAX(__tx_lsn) FROM %s)",
+                RelationGetRelationName(rel), RelationGetRelationName(rel));
         
-        while (table_scan_getnextslot(scan, BackwardScanDirection, slot))
+        elog(DEBUG2, "get_previous_hash: executing query: %s", query);
+        
+        spi_result = SPI_execute(query, true, 1);  /* read_only=true, limit=1 */
+        
+        if (spi_result == SPI_OK_SELECT && SPI_processed > 0)
         {
-            /* Get the most recent tuple */
-            if (!TupIsNull(slot))
+            tuptable = SPI_tuptable;
+            max_hash_datum = SPI_getbinval(tuptable->vals[0], tuptable->tupdesc, 1, &isnull);
+            
+            if (!isnull)
             {
-                slot_getallattrs(slot);
-                if (!slot->tts_isnull[curr_hash_attno])
-                {
-                    Datum d = slot->tts_values[curr_hash_attno];
-                    bool isvarlena = true;
-                    prev_hash = (bytea *) datumCopy(d, isvarlena, -1);
-                    break; // got latest row
-                }
+                /* Copy the hash to a longer-lived memory context */
+                oldcontext = MemoryContextSwitchTo(CurTransactionContext);
+                prev_hash = (bytea *) datumCopy(max_hash_datum, false, -1);
+                MemoryContextSwitchTo(oldcontext);
+                
+                elog(DEBUG1, "get_previous_hash: found existing hash, size=%d", 
+                     VARSIZE(prev_hash));
             }
         }
         
-        table_endscan(scan);
-        ExecDropSingleTupleTableSlot(slot);
+        SPI_finish();
     }
     PG_CATCH();
     {
-        /* Clean up resources on error */
-        if (scan)
-            table_endscan(scan);
-        if (slot)
-            ExecDropSingleTupleTableSlot(slot);
+        /* Clean up SPI connection on error */
+        SPI_finish();
         PG_RE_THROW();
     }
     PG_END_TRY();
     
     if (prev_hash == NULL)
     {
-        /* First row ever */
-        prev_hash = palloc0(VARHDRSZ + 32); // 32 bytes for dummy hash
+        /* First row ever - create genesis hash (all zeros) */
+        oldcontext = MemoryContextSwitchTo(CurTransactionContext);
+        prev_hash = palloc0(VARHDRSZ + 32); // 32 bytes for SHA256 hash
         SET_VARSIZE(prev_hash, VARHDRSZ + 32);
         memset(VARDATA(prev_hash), 0, 32);
+        MemoryContextSwitchTo(oldcontext);
+        
+        elog(DEBUG1, "get_previous_hash: created genesis hash (all zeros)");
     }
     
-    elog(LOG, "=== get_previous_hash END ===");
+    elog(DEBUG1, "get_previous_hash: END for relation %s", RelationGetRelationName(rel));
     return prev_hash;
 }
 
