@@ -1,0 +1,211 @@
+site_name: PostgreSQL Blockchain Extension Documentation
+site_description: Comprehensive documentation for the PostgreSQL Blockchain Table Extension
+site_author: PostgreSQL Blockchain Extension Team
+site_url: https://your-org.github.io/apostgres/
+
+# Repository
+repo_name: your-org/apostgres
+repo_url: https://github.com/your-org/apostgres
+edit_uri: edit/master/docs/
+
+# Copyright
+copyright: Copyright &copy; 2025 PostgreSQL Blockchain Extension Contributors
+
+# Configuration
+theme:
+  name: material
+  language: en
+  palette:
+    # Palette toggle for light mode
+    - scheme: default
+      primary: blue
+      accent: blue
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Palette toggle for dark mode
+    - scheme: slate
+      primary: blue
+      accent: blue
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  font:
+    text: Roboto
+    code: Roboto Mono
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.path
+    - navigation.indexes
+    - navigation.top
+    - navigation.tracking
+    - search.highlight
+    - search.share
+    - search.suggest
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - content.tooltips
+    - content.action.edit
+    - toc.follow
+    - toc.integrate
+  icon:
+    repo: fontawesome/brands/github
+    edit: material/pencil
+    view: material/eye
+
+# Plugins
+plugins:
+  - search:
+      lang: en
+  - git-revision-date-localized:
+      type: date
+  - git-committers:
+      repository: your-org/apostgres
+      branch: master
+  - minify:
+      minify_html: true
+  - glightbox:
+      touchNavigation: true
+      loop: false
+      effect: zoom
+      slide_effect: slide
+      width: 100%
+      height: auto
+      zoomable: true
+      draggable: true
+
+# Extensions
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - toc:
+      permalink: true
+      title: On this page
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.magiclink:
+      normalize_issue_symbols: true
+      repo_url_shorthand: true
+      user: your-org
+      repo: apostgres
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.snippets:
+      check_paths: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+      combine_header_slug: true
+      slugify: !!python/object/apply:pymdownx.slugs.slugify
+        kwds:
+          case: lower
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+# Page tree
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Overview: getting-started/overview.md
+    - Quick Start: getting-started/quick-start.md
+    - Installation: deployment/installation.md
+    - Configuration: deployment/configuration.md
+  - Architecture:
+    - High-Level Design: HLD_PostgreSQL_Blockchain_Extension.md
+    - System Overview: architecture/index.md
+    - Table Access Method: architecture/blockchain-access-method.md
+    - Hash Chain System: architecture/hash-chain-system.md
+    - Counter Management: architecture/counter-management.md
+    - Immutability Enforcement: architecture/immutability-enforcement.md
+  - API Reference:
+    - API Overview: api/index.md
+    - C API Reference: api/c-api-reference.md
+    - SQL Functions: api/sql-functions-reference.md
+    - System Catalogs: api/system-catalogs.md
+  - User Guide:
+    - User Guide Overview: user-guide/index.md
+    - Creating Blockchain Tables: user-guide/creating-tables.md
+    - Working with Data: user-guide/working-with-data.md
+    - System Columns: user-guide/system-columns.md
+    - Security Features: user-guide/security-features.md
+    - Best Practices: user-guide/best-practices.md
+  - Development:
+    - Contributing: development/contributing.md
+    - Development Setup: development/setup.md
+    - Testing Guide: development/testing-guide.md
+    - Debugging Guide: development/debugging.md
+    - Performance Testing: development/performance-testing.md
+  - Deployment:
+    - Deployment Overview: deployment/index.md
+    - Installation Guide: deployment/installation.md
+    - Configuration: deployment/configuration.md
+    - Migration Guide: deployment/migration.md
+    - Monitoring: deployment/monitoring.md
+    - Troubleshooting: deployment/troubleshooting.md
+  - Examples:
+    - Examples Overview: examples/index.md
+    - Basic Usage: examples/basic-usage.md
+    - Audit Logging: examples/audit-logging.md
+    - Financial Records: examples/financial-records.md
+    - Compliance Use Cases: examples/compliance.md
+  - Reference:
+    - Changelog: reference/changelog.md
+    - FAQ: reference/faq.md
+    - Glossary: reference/glossary.md
+    - Performance Benchmarks: reference/performance.md
+
+# Extra CSS and JavaScript
+extra_css:
+  - stylesheets/extra.css
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://polyfill.io/v3/polyfill.min.js?features=es6
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+
+# Social links
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/your-org/apostgres
+      name: GitHub Repository
+    - icon: fontawesome/solid/paper-plane
+      link: mailto:contact@example.com
+      name: Contact Us
+  version:
+    provider: mike
+    default: latest
+  analytics:
+    provider: google
+    property: G-XXXXXXXXXX  # Replace with your Google Analytics ID
+  generator: false
+
+# Watch additional directories for changes
+watch:
+  - docs/
+  - mkdocs.yml

@@ -1,0 +1,342 @@
+/* Custom CSS for PostgreSQL Blockchain Extension Documentation */
+
+/* Root variables for consistent theming */
+:root {
+  --blockchain-primary: #2196f3;
+  --blockchain-secondary: #4caf50;
+  --blockchain-accent: #ff9800;
+  --blockchain-warning: #f44336;
+  --blockchain-success: #4caf50;
+  --blockchain-info: #2196f3;
+}
+
+/* Enhanced grid cards styling */
+.grid.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+.grid.cards > .admonition {
+  margin: 0;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+.grid.cards > .admonition:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.12);
+}
+
+/* Custom admonition types for blockchain concepts */
+.admonition.blockchain {
+  border-color: var(--blockchain-primary);
+}
+
+.admonition.blockchain > .admonition-title {
+  background-color: var(--blockchain-primary);
+  color: white;
+}
+
+.admonition.blockchain > .admonition-title::before {
+  content: "⛓️";
+  margin-right: 0.5rem;
+}
+
+.admonition.immutable {
+  border-color: var(--blockchain-warning);
+}
+
+.admonition.immutable > .admonition-title {
+  background-color: var(--blockchain-warning);
+  color: white;
+}
+
+.admonition.immutable > .admonition-title::before {
+  content: "🔒";
+  margin-right: 0.5rem;
+}
+
+.admonition.performance {
+  border-color: var(--blockchain-secondary);
+}
+
+.admonition.performance > .admonition-title {
+  background-color: var(--blockchain-secondary);
+  color: white;
+}
+
+.admonition.performance > .admonition-title::before {
+  content: "⚡";
+  margin-right: 0.5rem;
+}
+
+/* Code block enhancements */
+.highlight .filename {
+  background-color: var(--md-code-bg-color);
+  color: var(--md-code-fg-color);
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--md-default-fg-color--lightest);
+  font-weight: 500;
+  border-radius: 0.2rem 0.2rem 0 0;
+}
+
+/* SQL syntax highlighting improvements */
+.highlight .k { /* Keywords */
+  color: #0066cc;
+  font-weight: bold;
+}
+
+.highlight .kt { /* Keywords.Type */
+  color: #2e8b57;
+  font-weight: bold;
+}
+
+.highlight .s { /* Strings */
+  color: #d73a49;
+}
+
+.highlight .c1 { /* Comments */
+  color: #6a737d;
+  font-style: italic;
+}
+
+/* Table styling improvements */
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1rem 0;
+}
+
+table th {
+  background-color: var(--md-default-fg-color--lighter);
+  font-weight: 600;
+  padding: 0.75rem;
+  border: 1px solid var(--md-default-fg-color--lightest);
+}
+
+table td {
+  padding: 0.75rem;
+  border: 1px solid var(--md-default-fg-color--lightest);
+}
+
+table tr:nth-child(even) {
+  background-color: var(--md-default-bg-color--light);
+}
+
+/* Architecture diagram styling */
+.architecture-diagram {
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  padding: 2rem;
+  border-radius: 0.5rem;
+  margin: 2rem 0;
+  text-align: center;
+}
+
+/* Statistics boxes */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin: 2rem 0;
+}
+
+.stat-box {
+  background: var(--md-default-bg-color--light);
+  padding: 1.5rem;
+  border-radius: 0.5rem;
+  text-align: center;
+  border-left: 4px solid var(--blockchain-primary);
+}
+
+.stat-number {
+  font-size: 2rem;
+  font-weight: bold;
+  color: var(--blockchain-primary);
+  display: block;
+}
+
+.stat-label {
+  color: var(--md-default-fg-color--light);
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
+}
+
+/* Navigation improvements */
+.md-nav__item--active > .md-nav__link {
+  color: var(--blockchain-primary);
+  font-weight: 600;
+}
+
+/* Tabbed content styling */
+.tabbed-set {
+  margin: 1rem 0;
+}
+
+.tabbed-set > input:checked + label {
+  color: var(--blockchain-primary);
+  border-color: var(--blockchain-primary);
+}
+
+/* Search result improvements */
+.md-search-result__title {
+  color: var(--blockchain-primary);
+}
+
+/* Footer improvements */
+.md-footer {
+  background-color: var(--md-default-bg-color--dark);
+}
+
+/* API documentation styling */
+.api-function {
+  background: var(--md-code-bg-color);
+  padding: 1rem;
+  border-radius: 0.3rem;
+  margin: 1rem 0;
+  border-left: 4px solid var(--blockchain-primary);
+}
+
+.api-function-name {
+  font-family: var(--md-code-font);
+  font-weight: bold;
+  color: var(--blockchain-primary);
+  font-size: 1.1rem;
+}
+
+.api-parameters {
+  margin: 0.5rem 0;
+  font-size: 0.9rem;
+}
+
+.api-returns {
+  margin: 0.5rem 0;
+  font-size: 0.9rem;
+  font-style: italic;
+}
+
+/* Performance metrics styling */
+.perf-metric {
+  display: inline-block;
+  background: var(--blockchain-secondary);
+  color: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 1rem;
+  font-size: 0.8rem;
+  margin: 0.25rem;
+}
+
+/* Security indicators */
+.security-level-high {
+  color: var(--blockchain-success);
+  font-weight: bold;
+}
+
+.security-level-medium {
+  color: var(--blockchain-accent);
+  font-weight: bold;
+}
+
+.security-level-low {
+  color: var(--blockchain-warning);
+  font-weight: bold;
+}
+
+/* Version badges */
+.version-badge {
+  display: inline-block;
+  background: var(--blockchain-info);
+  color: white;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.3rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+/* Responsive improvements */
+@media screen and (max-width: 768px) {
+  .grid.cards {
+    grid-template-columns: 1fr;
+  }
+  
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .architecture-diagram {
+    padding: 1rem;
+  }
+}
+
+/* Print styles */
+@media print {
+  .md-header,
+  .md-nav,
+  .md-footer {
+    display: none;
+  }
+  
+  .md-content {
+    max-width: none;
+  }
+  
+  .grid.cards {
+    display: block;
+  }
+  
+  .grid.cards > .admonition {
+    margin: 1rem 0;
+    break-inside: avoid;
+  }
+}
+
+/* Dark mode adjustments */
+[data-md-color-scheme="slate"] {
+  --blockchain-primary: #64b5f6;
+  --blockchain-secondary: #81c784;
+  --blockchain-accent: #ffb74d;
+}
+
+[data-md-color-scheme="slate"] .stat-box {
+  background: var(--md-default-bg-color--lighter);
+}
+
+[data-md-color-scheme="slate"] .architecture-diagram {
+  background: linear-gradient(135deg, #37474f 0%, #263238 100%);
+}
+
+/* Animation for interactive elements */
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+
+.loading {
+  animation: pulse 2s infinite;
+}
+
+/* Accessibility improvements */
+.md-nav__link:focus,
+.md-search__input:focus {
+  outline: 2px solid var(--blockchain-primary);
+  outline-offset: 2px;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  :root {
+    --blockchain-primary: #0056b3;
+    --blockchain-secondary: #28a745;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
