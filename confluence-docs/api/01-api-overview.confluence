@@ -1,0 +1,419 @@
+# API Reference Overview
+
+{info:title=Comprehensive API Documentation}
+The PostgreSQL Blockchain Extension provides comprehensive APIs for both C-level development and SQL-level operations. This section contains detailed reference documentation for all public interfaces.
+{info}
+
+{toc:printable=true|style=disc|maxLevel=3}
+
+## API Categories
+
+{section}
+{column:width=33%}
+{panel:title=💻 C API Reference|borderColor=#2196F3|titleBGColor=#E3F2FD}
+Complete reference for C functions, structures, and interfaces for extension developers
+
+**Key Features:**
+* Table Access Method interfaces
+* Hash computation functions
+* Counter management APIs
+* System column utilities
+
+[📖 C API Reference|API Reference - C API Reference]
+{panel}
+{column}
+
+{column:width=33%}
+{panel:title=🗄️ SQL Functions|borderColor=#4CAF50|titleBGColor=#E8F5E8}
+User-facing SQL functions for blockchain table operations and management
+
+**Categories:**
+* Table management functions
+* System column access
+* Hash chain verification
+* Counter operations
+
+[📖 SQL Functions Reference|API Reference - SQL Functions Reference]
+{panel}
+{column}
+
+{column:width=33%}
+{panel:title=📊 System Catalogs|borderColor=#FF9800|titleBGColor=#FFF3E0}
+System catalog extensions and blockchain-specific metadata
+
+**Components:**
+* Blockchain table metadata
+* System column definitions
+* Counter state information
+* Security event logs
+
+[📖 System Catalogs|API Reference - System Catalogs]
+{panel}
+{column}
+{section}
+
+## Quick Reference
+
+### Core C Functions
+
+{code:c|title=Essential C API Functions}
+// Table Access Method
+const TableAmRoutine *GetBlockchainTableAmRoutine(void);
+
+// Hash Computation
+bytea *compute_curr_hash_with_counter(Relation rel, TupleTableSlot *slot,
+                                     TimestampTz ts, bytea *prev_hash, uint64 counter);
+
+// Counter Management
+uint64 BlockchainGetNextCounter(Oid table_oid);
+void BlockchainCounterShmemInit(void);
+
+// System Column Management
+bool is_blockchain_system_column(const char *colname);
+{code}
+
+### Key SQL Functions
+
+{code:sql|title=Essential SQL Functions}
+-- Table Management
+SELECT is_blockchain_table('table_name');
+SELECT * FROM list_blockchain_tables();
+SELECT * FROM describe_blockchain_table('table_name');
+
+-- System Column Access
+SELECT * FROM get_blockchain_audit_data('table_name', 100);
+SELECT * FROM get_blockchain_system_columns('table_name', row_uuid);
+
+-- Chain Verification
+SELECT * FROM verify_hash_chain('table_name');
+SELECT * FROM get_hash_chain_info('table_name', counter_value);
+
+-- Counter Management
+SELECT * FROM get_blockchain_counters();
+SELECT get_next_counter_preview('table_name');
+{code}
+
+## API Stability Levels
+
+{panel:title=🔒 Stable APIs|borderColor=#4CAF50|titleBGColor=#E8F5E8}
+These APIs are considered stable and will maintain backward compatibility:
+
+{expand:title=Stable API List}
+* **Core TAM Interface**: Table Access Method functions
+* **Hash Functions**: SHA-256 computation and chain management
+* **Counter System**: Basic counter operations
+* **SQL Functions**: User-facing blockchain operations
+{expand}
+{panel}
+
+{panel:title=🔄 Evolving APIs|borderColor=#FF9800|titleBGColor=#FFF3E0}
+These APIs may change between versions with proper deprecation notices:
+
+{expand:title=Evolving API List}
+* **System Column Management**: Internal column handling
+* **Utility Functions**: Administrative and maintenance functions
+* **Advanced Features**: Performance optimization and monitoring
+{expand}
+{panel}
+
+{panel:title=⚠️ Internal APIs|borderColor=#F44336|titleBGColor=#FFEBEE}
+These APIs are for internal use and may change without notice:
+
+{expand:title=Internal API List}
+* **Memory Management**: Internal memory allocation patterns
+* **Low-level Storage**: Direct storage access functions
+* **Debug Functions**: Development and debugging utilities
+{expand}
+{panel}
+
+## Integration Guidelines
+
+### C Extension Development
+
+{expand:title=C Extension Development Best Practices}
+For developers creating C extensions that interact with blockchain tables:
+
+1. **Include Headers**: Always include the appropriate blockchain headers
+   {code:c}
+   #include "blockchain/blockchainam.h"
+   #include "blockchain/blockchain_hash.h"
+   #include "blockchain/blockchain_counter.h"
+   {code}
+
+2. **Check Table Type**: Verify table type before operations
+   {code:c}
+   if (rel->rd_rel->relkind != RELKIND_BLOCKCHAIN_TABLE) {
+       ereport(ERROR, (errmsg("relation is not a blockchain table")));
+   }
+   {code}
+
+3. **Respect Immutability**: Never attempt modification operations
+4. **Use Provided APIs**: Use documented APIs rather than direct access
+{expand}
+
+### SQL Application Development
+
+{expand:title=SQL Application Development Guidelines}
+For application developers using SQL interfaces:
+
+1. **Use Helper Functions**: Leverage provided SQL functions for blockchain operations
+2. **Handle System Columns**: Be aware of hidden system columns in queries
+3. **Error Handling**: Implement proper error handling for blocked operations
+4. **Performance Considerations**: Understand the performance characteristics
+
+{code:sql|title=Example Error Handling}
+DO $$
+BEGIN
+    PERFORM blockchain_operation('table_name');
+EXCEPTION 
+    WHEN feature_not_supported THEN
+        RAISE NOTICE 'Operation blocked by immutability protection';
+    WHEN others THEN
+        RAISE;
+END $$;
+{code}
+{expand}
+
+## Error Handling
+
+### Common Error Patterns
+
+{section}
+{column:width=50%}
+{panel:title=C API Error Handling|borderColor=#673AB7|titleBGColor=#EDE7F6}
+{code:c|title=C Error Handling Pattern}
+PG_TRY();
+{
+    result = blockchain_operation(...);
+}
+PG_CATCH();
+{
+    // Handle blockchain-specific errors
+    if (geterrcode() == ERRCODE_FEATURE_NOT_SUPPORTED)
+    {
+        // Handle immutability violation
+    }
+    PG_RE_THROW();
+}
+PG_END_TRY();
+{code}
+{panel}
+{column}
+
+{column:width=50%}
+{panel:title=SQL Error Handling|borderColor=#E91E63|titleBGColor=#FCE4EC}
+{code:sql|title=SQL Error Handling Pattern}
+DO $$
+BEGIN
+    PERFORM blockchain_operation('table_name');
+EXCEPTION 
+    WHEN feature_not_supported THEN
+        RAISE NOTICE 'Operation blocked';
+    WHEN others THEN
+        RAISE;
+END $$;
+{code}
+{panel}
+{column}
+{section}
+
+### Error Codes Reference
+
+| Error Code | Meaning | Common Causes |
+| --- | --- | --- |
+| `ERRCODE_FEATURE_NOT_SUPPORTED` | Operation not allowed | UPDATE/DELETE/ALTER on blockchain table |
+| `ERRCODE_DATA_CORRUPTED` | Hash chain integrity failure | Data tampering detected |
+| `ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE` | System not initialized | Counter system not ready |
+| `ERRCODE_WRONG_OBJECT_TYPE` | Not a blockchain table | Function called on regular table |
+
+## Performance Considerations
+
+### API Performance Tiers
+
+{section}
+{column:width=33%}
+{panel:title=🚀 High Performance (< 1ms)|titleBGColor=#E8F5E8}
+* `is_blockchain_table()`
+* `BlockchainGetNextCounter()` (cached)
+* Basic system column access
+{panel}
+{column}
+
+{column:width=33%}
+{panel:title=⚡ Medium Performance (1-10ms)|titleBGColor=#FFF3E0}
+* Hash computation functions
+* System column filtering
+* Counter management operations
+{panel}
+{column}
+
+{column:width=33%}
+{panel:title=🐌 Low Performance (10ms+)|titleBGColor=#FFEBEE}
+* Chain verification functions
+* Comprehensive table analysis
+* Export/import operations
+{panel}
+{column}
+{section}
+
+### Optimization Guidelines
+
+{tip:title=Performance Optimization Tips}
+1. **Cache Results**: Cache results of expensive operations when possible
+2. **Batch Operations**: Group related operations together
+3. **Avoid Verification in Hot Paths**: Run verification during maintenance windows
+4. **Use Appropriate APIs**: Choose the right API for your performance needs
+{tip}
+
+## Version Compatibility
+
+### API Versioning
+
+{panel:title=📋 Versioning Strategy|borderColor=#607D8B|titleBGColor=#ECEFF1}
+The blockchain extension follows semantic versioning:
+
+* **Major versions**: Breaking API changes
+* **Minor versions**: New features with backward compatibility
+* **Patch versions**: Bug fixes and performance improvements
+{panel}
+
+### Migration Guide
+
+{expand:title=Version Migration Steps}
+When upgrading between versions:
+
+1. **Check Release Notes**: Review API changes in release documentation
+2. **Test Applications**: Verify application compatibility with new version
+3. **Update Code**: Modify code to use new APIs where beneficial
+4. **Performance Testing**: Validate performance with new version
+{expand}
+
+## Examples and Tutorials
+
+### Basic C Extension Example
+
+{expand:title=Complete C Extension Example}
+{code:c|title=Simple Blockchain Function}
+#include "blockchain/blockchainam.h"
+
+PG_MODULE_MAGIC;
+
+PG_FUNCTION_INFO_V1(my_blockchain_function);
+
+Datum
+my_blockchain_function(PG_FUNCTION_ARGS)
+{
+    Oid table_oid = PG_GETARG_OID(0);
+    Relation rel = relation_open(table_oid, AccessShareLock);
+    
+    // Check if this is a blockchain table
+    if (rel->rd_rel->relkind != RELKIND_BLOCKCHAIN_TABLE)
+    {
+        relation_close(rel, AccessShareLock);
+        ereport(ERROR, (errmsg("relation is not a blockchain table")));
+    }
+    
+    // Perform blockchain-specific operations
+    // ... implementation details ...
+    
+    relation_close(rel, AccessShareLock);
+    PG_RETURN_BOOL(true);
+}
+{code}
+{expand}
+
+### SQL Function Usage Example
+
+{expand:title=Advanced SQL Function Example}
+{code:sql|title=Comprehensive Audit Function}
+-- Create a comprehensive blockchain audit function
+CREATE OR REPLACE FUNCTION audit_user_actions(user_id_param INTEGER)
+RETURNS TABLE(
+    action TEXT,
+    resource_id INTEGER,
+    timestamp TIMESTAMPTZ,
+    sequence_number BIGINT,
+    hash_verified BOOLEAN
+) AS $$
+DECLARE
+    table_name TEXT := 'user_audit_log';
+    chain_valid BOOLEAN;
+BEGIN
+    -- Verify table is a blockchain table
+    IF NOT is_blockchain_table(table_name) THEN
+        RAISE EXCEPTION 'Table % is not a blockchain table', table_name;
+    END IF;
+    
+    -- Return audit data with verification
+    RETURN QUERY
+    SELECT 
+        a.action,
+        a.resource_id,
+        a.__tx_timestamp,
+        a.__tx_lsn,
+        v.hash_valid
+    FROM user_audit_log a
+    LEFT JOIN verify_hash_chain(table_name) v ON v.counter_value = a.__tx_lsn
+    WHERE a.user_id = user_id_param
+    ORDER BY a.__tx_lsn;
+END;
+$$ LANGUAGE plpgsql;
+{code}
+{expand}
+
+## Support and Community
+
+{section}
+{column:width=25%}
+{panel:title=📖 Documentation|borderColor=#2196F3|titleBGColor=#E3F2FD}
+Check this API reference first
+
+[Browse Documentation|API Reference]
+{panel}
+{column}
+
+{column:width=25%}
+{panel:title=🐛 GitHub Issues|borderColor=#F44336|titleBGColor=#FFEBEE}
+Report bugs and request features
+
+[Report Issues|YOUR_REPO_URL/issues]
+{panel}
+{column}
+
+{column:width=25%}
+{panel:title=💬 Discussions|borderColor=#4CAF50|titleBGColor=#E8F5E8}
+Ask questions and share ideas
+
+[Join Discussions|YOUR_REPO_URL/discussions]
+{panel}
+{column}
+
+{column:width=25%}
+{panel:title=📚 Stack Overflow|borderColor=#FF9800|titleBGColor=#FFF3E0}
+Community Q&A
+
+Tag: `postgresql-blockchain`
+{panel}
+{column}
+{section}
+
+### Contributing
+
+{expand:title=How to Contribute to the API}
+* **Bug Reports**: Help improve API reliability
+* **Feature Requests**: Suggest new API features
+* **Documentation**: Improve API documentation
+* **Code Contributions**: Extend API functionality
+
+See the [Contributing Guide|Development - Contributing Guide] for detailed information.
+{expand}
+
+## Child Pages
+
+{children:all=true|sort=creation|reverse=false|style=h4|excerpt=true}
+
+---
+
+{note:title=Comprehensive API Coverage}
+This API reference provides comprehensive coverage of all public interfaces in the PostgreSQL Blockchain Extension, enabling developers to effectively integrate with and extend the blockchain functionality.
+{note}

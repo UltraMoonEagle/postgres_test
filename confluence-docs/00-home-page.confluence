@@ -1,0 +1,305 @@
+# PostgreSQL Blockchain Extension
+
+{info:title=Enterprise Documentation}
+This is the comprehensive documentation for the PostgreSQL Blockchain Extension - a powerful system that adds immutable, tamper-evident storage capabilities to PostgreSQL through cryptographic hash chaining and global counter management.
+{info}
+
+{panel:title=Quick Navigation|borderStyle=dashed|borderColor=#ccc|titleBGColor=#f0f8ff|bgColor=#ffffff}
+
+{section}
+{column:width=25%}
+**🚀 Getting Started**
+* [Overview|Getting Started - Overview]
+* [Quick Start Guide|Getting Started - Quick Start Guide]
+{column}
+
+{column:width=25%}
+**🏗️ Architecture**
+* [Architecture Overview|Architecture - Architecture Overview]
+* [Table Access Method|Architecture - Blockchain Table Access Method]
+* [Hash Chain System|Architecture - Hash Chain System]
+* [Counter Management|Architecture - Counter Management]
+{column}
+
+{column:width=25%}
+**📚 API Reference**
+* [API Overview|API Reference - API Overview]
+* [C API Reference|API Reference - C API Reference]
+* [SQL Functions|API Reference - SQL Functions Reference]
+{column}
+
+{column:width=25%}
+**👤 User Guide**
+* [Creating Tables|User Guide - Creating Blockchain Tables]
+* [Working with Data|User Guide - Working with Data]
+* [Best Practices|User Guide - Best Practices]
+{column}
+{section}
+
+{panel}
+
+## What is the PostgreSQL Blockchain Extension?
+
+The PostgreSQL Blockchain Extension transforms PostgreSQL into a blockchain-enabled database system, providing:
+
+{info:title=Key Features}
+* **🔒 Immutable Storage**: Once data is inserted, it cannot be modified or deleted
+* **🔗 Cryptographic Integrity**: SHA-256 hash chains ensure tamper detection  
+* **🔢 Sequential Ordering**: Global counter system provides unique sequencing
+* **👁️ Transparent Access**: Standard SQL interface with automatic system columns
+* **🛡️ Multi-layer Protection**: Defense-in-depth security architecture
+{info}
+
+## Use Cases
+
+{section}
+{column:width=50%}
+{panel:title=🔐 Audit Logging|borderColor=#4CAF50|titleBGColor=#E8F5E8}
+Immutable audit trails for compliance and forensics
+{panel}
+
+{panel:title=🏦 Financial Records|borderColor=#2196F3|titleBGColor=#E3F2FD}
+Tamper-proof financial transaction history
+{panel}
+{column}
+
+{column:width=50%}
+{panel:title=📋 Compliance|borderColor=#FF9800|titleBGColor=#FFF3E0}
+Regulatory data that must never be modified
+{panel}
+
+{panel:title=⏰ Supply Chain|borderColor=#9C27B0|titleBGColor=#F3E5F5}
+Track product journey without alterations
+{panel}
+{column}
+{section}
+
+## Quick Example
+
+Here's how easy it is to create and use a blockchain table:
+
+{code:sql|title=Creating a Blockchain Table}
+-- Create an immutable audit log
+CREATE BLOCKCHAIN TABLE audit_log (
+    user_id INTEGER,
+    action VARCHAR(200),
+    ip_address INET,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Insert data (only operation allowed)
+INSERT INTO audit_log (user_id, action, ip_address) 
+VALUES (1001, 'login', '192.168.1.100');
+
+-- Query data (system columns are hidden by default)
+SELECT * FROM audit_log;
+{code}
+
+{code:sql|title=Accessing System Columns}
+-- View blockchain metadata explicitly
+SELECT user_id, action, __tx_lsn, __curr_hash, __tx_timestamp 
+FROM audit_log;
+
+-- Verify chain integrity
+SELECT * FROM verify_hash_chain('audit_log');
+{code}
+
+{warning:title=Immutability Guarantee}
+Once created, blockchain tables **cannot** be modified:
+* `UPDATE` operations are blocked
+* `DELETE` operations are blocked  
+* `TRUNCATE` operations are blocked
+* Schema changes (`ALTER TABLE`) are restricted
+{warning}
+
+## Implementation Statistics
+
+{panel:title=📊 Implementation Scale|borderColor=#673AB7|titleBGColor=#EDE7F6}
+
+{section}
+{column:width=25%}
+{panel:title=47|titleBGColor=#E1F5FE|bgColor=#F0F8FF}
+**Commits**
+Implementing blockchain functionality
+{panel}
+{column}
+
+{column:width=25%}
+{panel:title=5,541|titleBGColor=#E8F5E8|bgColor=#F0F8F0}
+**Lines of Code**
+Core C implementation
+{panel}
+{column}
+
+{column:width=25%}
+{panel:title=9|titleBGColor=#FFF3E0|bgColor=#FFFBF0}
+**System Columns**
+Automatically managed
+{panel}
+{column}
+
+{column:width=25%}
+{panel:title=4|titleBGColor=#F3E5F5|bgColor=#FBF8FB}
+**Protection Layers**
+Ensuring immutability
+{panel}
+{column}
+{section}
+
+{panel}
+
+{panel:title=⚡ Performance Impact|borderColor=#4CAF50|titleBGColor=#E8F5E8}
+
+{section}
+{column:width=25%}
+{panel:title=5%|titleBGColor=#E1F5FE|bgColor=#F0F8FF}
+**Overhead**
+For INSERT operations
+{panel}
+{column}
+
+{column:width=25%}
+{panel:title=~2µs|titleBGColor=#E8F5E8|bgColor=#F0F8F0}
+**Hash Time**
+Per row computation
+{panel}
+{column}
+
+{column:width=25%}
+{panel:title=<1µs|titleBGColor=#FFF3E0|bgColor=#FFFBF0}
+**Counter Time**
+Per increment
+{panel}
+{column}
+
+{column:width=25%}
+{panel:title=104 bytes|titleBGColor=#F3E5F5|bgColor=#FBF8FB}
+**Storage**
+Overhead per row
+{panel}
+{column}
+{section}
+
+{panel}
+
+## System Components
+
+{expand:title=🗄️ Blockchain Table Access Method}
+Core storage engine that implements immutable table operations with automatic system column management.
+* Full PostgreSQL TAM compliance
+* Automatic system column injection  
+* Immutable tuple operations
+* Seamless SQL integration
+{expand}
+
+{expand:title=🔗 Hash Chain Engine}
+SHA-256 cryptographic system that links each row to the previous one, creating tamper-evident chains.
+* SHA-256 cryptographic hashing
+* Chain-based data linking
+* Tamper detection capabilities
+* Cross-platform consistency
+{expand}
+
+{expand:title=🔢 Global Counter System}
+Unique sequential numbering across all blockchain tables with persistent recovery mechanisms.
+* Shared memory architecture
+* Lazy recovery mechanisms
+* Atomic counter operations
+* Persistent state management
+{expand}
+
+{expand:title=🛡️ Immutability Enforcement}
+Multi-layer protection system preventing any data modification through parser, utility hooks, and storage controls.
+* Parser-level syntax validation
+* Utility hook DDL interception
+* TAM-level operation blocking
+* System column access control
+{expand}
+
+## Getting Started Paths
+
+Choose your path based on your role:
+
+{section}
+{column:width=50%}
+{panel:title=👤 Database User|borderColor=#2196F3|titleBGColor=#E3F2FD}
+**I want to use blockchain tables in my application**
+
+1. [Quick Start Guide|Getting Started - Quick Start Guide]
+2. [User Guide|User Guide]
+3. [SQL Functions Reference|API Reference - SQL Functions Reference]
+{panel}
+
+{panel:title=🔧 System Administrator|borderColor=#FF9800|titleBGColor=#FFF3E0}
+**I want to deploy and manage blockchain tables**
+
+1. [Installation Guide|Deployment - Installation Guide]
+2. [Configuration Guide|Deployment - Configuration]
+3. [Monitoring Guide|Deployment - Monitoring]
+{panel}
+{column}
+
+{column:width=50%}
+{panel:title=👩‍💻 Developer|borderColor=#4CAF50|titleBGColor=#E8F5E8}
+**I want to contribute to or extend the blockchain functionality**
+
+1. [Architecture Overview|Architecture - Architecture Overview]
+2. [C API Reference|API Reference - C API Reference]
+3. [Contributing Guide|Development - Contributing Guide]
+{panel}
+
+{panel:title=🏗️ Architect|borderColor=#9C27B0|titleBGColor=#F3E5F5}
+**I want to understand the technical architecture**
+
+1. [High-Level Design|Architecture - Architecture Overview]
+2. [Architecture Deep Dive|Architecture]
+3. [Performance Benchmarks|Reference - Performance Benchmarks]
+{panel}
+{column}
+{section}
+
+## Child Pages
+
+{children:all=true|sort=creation|reverse=false|style=h4|excerpt=true}
+
+## Community and Support
+
+{section}
+{column:width=25%}
+{panel:title=🔗 GitHub|borderColor=#24292e|titleBGColor=#f6f8fa}
+[View Repository|YOUR_REPO_URL]
+Source code, issues, and discussions
+{panel}
+{column}
+
+{column:width=25%}
+{panel:title=💬 Discussions|borderColor=#0366d6|titleBGColor=#f1f8ff}
+[Join Discussions|YOUR_REPO_URL/discussions]
+Ask questions and share ideas
+{panel}
+{column}
+
+{column:width=25%}
+{panel:title=🐛 Issues|borderColor=#d73a49|titleBGColor=#ffeef0}
+[Report Issues|YOUR_REPO_URL/issues]
+Report bugs and request features
+{panel}
+{column}
+
+{column:width=25%}
+{panel:title=📧 Contact|borderColor=#28a745|titleBGColor=#f0fff4}
+[Contact Us|mailto:YOUR_CONTACT_EMAIL]
+Get in touch with the team
+{panel}
+{column}
+{section}
+
+---
+
+{note:title=About This Documentation}
+The PostgreSQL Blockchain Extension brings enterprise-grade immutable storage to PostgreSQL, enabling audit-grade data integrity with the familiar SQL interface you already know.
+
+**Last Updated**: {date}
+**Version**: 1.0
+**Authors**: PostgreSQL Blockchain Extension Team
+{note}

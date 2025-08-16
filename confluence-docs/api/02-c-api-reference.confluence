@@ -1,0 +1,974 @@
+# C API Reference
+
+{info:title=Complete C-Level API Documentation}
+This comprehensive reference documents all C functions, structures, and interfaces for developers working with the PostgreSQL Blockchain Extension at the C level, including extension development and core system integration.
+{info}
+
+{toc:printable=true|style=disc|maxLevel=3}
+
+## API Overview
+
+### Core API Categories
+
+{section}
+{column:width=50%}
+{panel:title=🗄️ Table Access Method APIs|borderColor=#2196F3|titleBGColor=#E3F2FD}
+Functions for implementing and interacting with the blockchain TAM
+
+* TAM routine registration
+* Tuple operations
+* Scan management
+* Relation utilities
+{panel}
+
+{panel:title=🔢 Counter Management APIs|borderColor=#4CAF50|titleBGColor=#E8F5E8}
+Global counter system functions
+
+* Counter increment operations
+* Shared memory management
+* Persistence functions
+* Recovery mechanisms
+{panel}
+{column}
+
+{column:width=50%}
+{panel:title=🔗 Hash Chain APIs|borderColor=#E91E63|titleBGColor=#FCE4EC}
+Cryptographic hash chain functions
+
+* Hash computation
+* Chain verification
+* Data serialization
+* Integrity checking
+{panel}
+
+{panel:title=🛡️ System Column APIs|borderColor=#FF5722|titleBGColor=#FBE9E7}
+System column management functions
+
+* Column definition utilities
+* Data population functions
+* Access control
+* Visibility management
+{panel}
+{column}
+{section}
+
+## Table Access Method APIs
+
+### Core TAM Functions
+
+{expand:title=Primary TAM Interface Functions}
+{code:c|title=GetBlockchainTableAmRoutine}
+/**
+ * Returns the blockchain table access method routine structure
+ * 
+ * @return Pointer to TableAmRoutine structure with blockchain TAM methods
+ */
+const TableAmRoutine *GetBlockchainTableAmRoutine(void);
+
+/**
+ * Usage Example:
+ */
+Datum
+blockchain_am_handler(PG_FUNCTION_ARGS)
+{
+    PG_RETURN_POINTER(GetBlockchainTableAmRoutine());
+}
+{code}
+{expand}
+
+### Tuple Operations
+
+{expand:title=Tuple Management Functions}
+{code:c|title=Tuple Operations}
+/**
+ * Insert a new tuple into a blockchain table
+ * 
+ * @param relation The blockchain table relation
+ * @param slot The tuple slot containing data to insert
+ * @param cid Command ID for the operation
+ * @param options Insert options (flags)
+ * @param bistate Bulk insert state (can be NULL)
+ */
+static void blockchain_tuple_insert(Relation relation, TupleTableSlot *slot,
+                                   CommandId cid, int options, 
+                                   BulkInsertState bistate);
+
+/**
+ * Lock a tuple for read access
+ * 
+ * @param relation The blockchain table relation
+ * @param tid Item pointer to the tuple
+ * @param snapshot Snapshot for visibility
+ * @param slot Slot to store the tuple data
+ * @param cid Command ID
+ * @param mode Lock mode (always ShareLock for blockchain)
+ * @param wait_policy Wait policy for lock acquisition
+ * @param flags Additional flags
+ * @param tmfd Failure data structure
+ * @return TM_Result indicating success or failure
+ */
+static TM_Result blockchain_tuple_lock(Relation relation, ItemPointer tid,
+                                      Snapshot snapshot, TupleTableSlot *slot,
+                                      CommandId cid, LockTupleMode mode,
+                                      LockWaitPolicy wait_policy, uint8 flags,
+                                      TM_FailureData *tmfd);
+
+/**
+ * Note: UPDATE and DELETE operations return NULL function pointers
+ * to ensure immutability at the TAM level
+ */
+{code}
+{expand}
+
+### Scan Operations
+
+{expand:title=Table Scanning Functions}
+{code:c|title=Scan Management}
+/**
+ * Begin a sequential scan of a blockchain table
+ * 
+ * @param relation The blockchain table to scan
+ * @param snapshot Snapshot for visibility
+ * @param nkeys Number of scan keys (usually 0 for full scan)
+ * @param key Scan keys for filtering (can be NULL)
+ * @param parallel_scan Parallel scan information (can be NULL)
+ * @param flags Scan flags
+ * @return TableScanDesc for the scan
+ */
+static TableScanDesc blockchain_scan_begin(Relation relation, Snapshot snapshot,
+                                          int nkeys, ScanKey key,
+                                          ParallelTableScanDesc parallel_scan,
+                                          uint32 flags);
+
+/**
+ * Get the next tuple from a blockchain table scan
+ * 
+ * @param scan The table scan descriptor
+ * @param direction Scan direction (usually ForwardScanDirection)
+ * @param slot Slot to store the retrieved tuple
+ * @return Slot with tuple data, or NULL if scan complete
+ */
+static TupleTableSlot *blockchain_scan_getnextslot(TableScanDesc scan,
+                                                  ScanDirection direction,
+                                                  TupleTableSlot *slot);
+
+/**
+ * End a blockchain table scan
+ * 
+ * @param scan The table scan descriptor to end
+ */
+static void blockchain_scan_end(TableScanDesc scan);
+
+/**
+ * Restart a blockchain table scan
+ * 
+ * @param scan The table scan descriptor
+ * @param key New scan keys (can be NULL)
+ * @param set_params Whether to set new parameters
+ * @param allow_strat Whether to allow strategy changes
+ * @param allow_sync Whether to allow sync changes
+ * @param allow_pagemode Whether to allow page mode changes
+ */
+static void blockchain_scan_rescan(TableScanDesc scan, ScanKey key,
+                                  bool set_params, bool allow_strat,
+                                  bool allow_sync, bool allow_pagemode);
+{code}
+{expand}
+
+### Relation Management
+
+{expand:title=Relation Utility Functions}
+{code:c|title=Relation Operations}
+/**
+ * Get the size of a blockchain table in pages
+ * 
+ * @param relation The blockchain table relation
+ * @param forkNumber Fork number (usually MAIN_FORKNUM)
+ * @return Size in pages
+ */
+static uint64 blockchain_relation_size(Relation relation, ForkNumber forkNumber);
+
+/**
+ * Determine if a blockchain table needs a TOAST table
+ * 
+ * @param relation The blockchain table relation
+ * @return true if TOAST table is needed, false otherwise
+ */
+static bool blockchain_relation_needs_toast_table(Relation relation);
+
+/**
+ * Estimate relation size for query planning
+ * 
+ * @param relation The blockchain table relation
+ * @param attr_widths Array of attribute widths
+ * @param pages Estimated number of pages (output)
+ * @param tuples Estimated number of tuples (output)
+ * @param allvisfrac Fraction of all-visible pages (output)
+ */
+static void blockchain_estimate_rel_size(Relation relation, int32 *attr_widths,
+                                        BlockNumber *pages, double *tuples,
+                                        double *allvisfrac);
+{code}
+{expand}
+
+## Hash Chain APIs
+
+### Hash Computation Functions
+
+{expand:title=Core Hash Functions}
+{code:c|title=Hash Computation}
+/**
+ * Compute SHA-256 hash for a blockchain table row with counter
+ * 
+ * @param rel The blockchain table relation
+ * @param slot Tuple slot containing the row data
+ * @param ts Timestamp to include in hash
+ * @param prev_hash Hash of the previous row (NULL for first row)
+ * @param counter Global counter value for this row
+ * @return bytea containing the computed SHA-256 hash
+ */
+bytea *compute_curr_hash_with_counter(Relation rel, TupleTableSlot *slot,
+                                     TimestampTz ts, bytea *prev_hash, 
+                                     uint64 counter);
+
+/**
+ * Get the hash of the most recent row in a blockchain table
+ * 
+ * @param rel The blockchain table relation
+ * @return bytea containing the previous hash, or NULL if table is empty
+ */
+bytea *get_previous_hash(Relation rel);
+
+/**
+ * Verify that a computed hash matches the stored hash for a row
+ * 
+ * @param rel The blockchain table relation
+ * @param slot Tuple slot containing the row data
+ * @param expected_hash The hash that should match
+ * @return true if hashes match, false otherwise
+ */
+bool verify_row_hash(Relation rel, TupleTableSlot *slot, bytea *expected_hash);
+
+/**
+ * Extract the current hash from a heap tuple
+ * 
+ * @param tuple The heap tuple
+ * @param rel The blockchain table relation
+ * @return bytea containing the current hash
+ */
+bytea *extract_current_hash_from_tuple(HeapTuple tuple, Relation rel);
+{code}
+{expand}
+
+### Data Serialization
+
+{expand:title=Hash Data Serialization Functions}
+{code:c|title=Data Serialization}
+/**
+ * Serialize a datum to a deterministic string representation for hashing
+ * 
+ * @param value The datum to serialize
+ * @param typeid The PostgreSQL type OID
+ * @return Allocated string representation (caller must pfree)
+ */
+char *serialize_datum_deterministic(Datum value, Oid typeid);
+
+/**
+ * Serialize all user columns from a tuple slot for hash computation
+ * 
+ * @param slot The tuple slot
+ * @param rel The relation (for column information)
+ * @return Allocated string representation (caller must pfree)
+ */
+char *serialize_user_columns_for_hash(TupleTableSlot *slot, Relation rel);
+
+/**
+ * Create a canonical string representation of a timestamp for hashing
+ * 
+ * @param ts The timestamp value
+ * @return Allocated string representation (caller must pfree)
+ */
+char *serialize_timestamp_for_hash(TimestampTz ts);
+
+/**
+ * Create a canonical string representation of a counter for hashing
+ * 
+ * @param counter The counter value
+ * @return Allocated string representation (caller must pfree)
+ */
+char *serialize_counter_for_hash(uint64 counter);
+{code}
+{expand}
+
+### Chain Verification
+
+{expand:title=Chain Verification Functions}
+{code:c|title=Chain Verification}
+/**
+ * Verify the entire hash chain for a blockchain table
+ * 
+ * @param rel The blockchain table relation
+ * @param error_callback Function to call for each verification error
+ * @param callback_context Context data for error callback
+ * @return true if entire chain is valid, false if any errors found
+ */
+bool verify_complete_hash_chain(Relation rel, 
+                               void (*error_callback)(uint64 counter, 
+                                                     const char *error_msg,
+                                                     void *context),
+                               void *callback_context);
+
+/**
+ * Verify hash chain integrity for a specific range of rows
+ * 
+ * @param rel The blockchain table relation
+ * @param start_counter Starting counter value (inclusive)
+ * @param end_counter Ending counter value (inclusive)
+ * @return Number of verification errors found
+ */
+int verify_hash_chain_range(Relation rel, uint64 start_counter, uint64 end_counter);
+
+/**
+ * Get detailed information about a specific link in the hash chain
+ * 
+ * @param rel The blockchain table relation
+ * @param counter The counter value to examine
+ * @param info Structure to fill with chain information
+ * @return true if counter exists and info was filled, false otherwise
+ */
+bool get_hash_chain_link_info(Relation rel, uint64 counter, 
+                             BlockchainChainLinkInfo *info);
+{code}
+{expand}
+
+## Counter Management APIs
+
+### Core Counter Functions
+
+{expand:title=Counter Operations}
+{code:c|title=Counter Management}
+/**
+ * Get the next counter value for a blockchain table
+ * 
+ * @param table_oid OID of the blockchain table
+ * @return Next unique counter value
+ */
+uint64 BlockchainGetNextCounter(Oid table_oid);
+
+/**
+ * Get the current global counter value (without incrementing)
+ * 
+ * @return Current global counter value
+ */
+uint64 BlockchainGetCurrentCounter(void);
+
+/**
+ * Preview what the next counter value would be for a table
+ * 
+ * @param table_oid OID of the blockchain table
+ * @return Next counter value that would be assigned
+ */
+uint64 BlockchainPreviewNextCounter(Oid table_oid);
+
+/**
+ * Force persistence of current counter state to disk
+ * 
+ * @return true if persistence successful, false otherwise
+ */
+bool BlockchainPersistCounters(void);
+
+/**
+ * Trigger recovery for a specific table's counter state
+ * 
+ * @param table_oid OID of the blockchain table
+ * @return true if recovery completed successfully
+ */
+bool BlockchainRecoverTableCounter(Oid table_oid);
+{code}
+{expand}
+
+### Shared Memory Management
+
+{expand:title=Counter Shared Memory Functions}
+{code:c|title=Shared Memory Management}
+/**
+ * Initialize the blockchain counter shared memory segment
+ * Called during PostgreSQL startup
+ */
+void BlockchainCounterShmemInit(void);
+
+/**
+ * Calculate the required size for counter shared memory
+ * 
+ * @return Size in bytes required for shared memory
+ */
+Size BlockchainCounterShmemSize(void);
+
+/**
+ * Get statistics about counter shared memory usage
+ * 
+ * @param stats Structure to fill with statistics
+ */
+void BlockchainGetCounterStats(BlockchainCounterStats *stats);
+
+/**
+ * Register a new blockchain table with the counter system
+ * 
+ * @param table_oid OID of the blockchain table
+ * @param table_name Name of the table (for debugging)
+ * @return Index of the table in the counter array, or -1 if full
+ */
+int BlockchainRegisterTable(Oid table_oid, const char *table_name);
+
+/**
+ * Unregister a blockchain table from the counter system
+ * 
+ * @param table_oid OID of the blockchain table
+ */
+void BlockchainUnregisterTable(Oid table_oid);
+{code}
+{expand}
+
+### Counter Recovery
+
+{expand:title=Recovery Functions}
+{code:c|title=Counter Recovery}
+/**
+ * Perform lazy recovery for all tables that need it
+ * 
+ * @return Number of tables that required recovery
+ */
+int BlockchainPerformLazyRecovery(void);
+
+/**
+ * Scan a blockchain table to determine its maximum counter value
+ * 
+ * @param rel The blockchain table relation
+ * @return Maximum counter value found, or 0 if table is empty
+ */
+uint64 BlockchainScanTableForMaxCounter(Relation rel);
+
+/**
+ * Load counter state from persistent storage
+ * 
+ * @return true if state was loaded successfully, false if file not found or corrupt
+ */
+bool BlockchainLoadCounterState(void);
+
+/**
+ * Save current counter state to persistent storage
+ * 
+ * @return true if state was saved successfully
+ */
+bool BlockchainSaveCounterState(void);
+{code}
+{expand}
+
+## System Column APIs
+
+### Column Definition Functions
+
+{expand:title=System Column Management}
+{code:c|title=System Column Operations}
+/**
+ * Check if a column name is a blockchain system column
+ * 
+ * @param colname The column name to check
+ * @return true if it's a system column, false otherwise
+ */
+bool is_blockchain_system_column(const char *colname);
+
+/**
+ * Get the number of system columns in blockchain tables
+ * 
+ * @return Number of system columns (currently 9)
+ */
+int get_blockchain_system_column_count(void);
+
+/**
+ * Get definition information for a specific system column
+ * 
+ * @param index Index of the system column (0-based)
+ * @param coldef Structure to fill with column definition
+ * @return true if index is valid, false otherwise
+ */
+bool get_blockchain_system_column_def(int index, BlockchainColumnDef *coldef);
+
+/**
+ * Get the attribute number for a system column in a relation
+ * 
+ * @param rel The blockchain table relation
+ * @param colname Name of the system column
+ * @return Attribute number, or InvalidAttrNumber if not found
+ */
+AttrNumber get_system_column_attno(Relation rel, const char *colname);
+{code}
+{expand}
+
+### System Column Population
+
+{expand:title=System Column Data Management}
+{code:c|title=System Column Population}
+/**
+ * Populate all system columns in a tuple slot for INSERT
+ * 
+ * @param slot The tuple slot to populate
+ * @param rel The blockchain table relation
+ * @param counter The counter value for this row
+ * @param prev_hash Hash of the previous row
+ * @param curr_hash Hash of the current row
+ */
+void populate_blockchain_system_columns(TupleTableSlot *slot, Relation rel,
+                                       uint64 counter, bytea *prev_hash,
+                                       bytea *curr_hash);
+
+/**
+ * Extract system column values from a stored tuple
+ * 
+ * @param tuple The heap tuple
+ * @param rel The blockchain table relation
+ * @param values Structure to fill with system column values
+ */
+void extract_system_column_values(HeapTuple tuple, Relation rel,
+                                 BlockchainSystemColumnValues *values);
+
+/**
+ * Validate that system columns are not specified in an INSERT
+ * 
+ * @param slot The tuple slot for INSERT
+ * @param rel The blockchain table relation
+ * @throws Error if any system columns are specified by user
+ */
+void validate_user_insert_columns(TupleTableSlot *slot, Relation rel);
+
+/**
+ * Filter system columns from SELECT * results
+ * 
+ * @param slot The tuple slot to filter
+ * @param show_system_columns Whether to show system columns
+ */
+void filter_system_columns_from_result(TupleTableSlot *slot, 
+                                      bool show_system_columns);
+{code}
+{expand}
+
+## Utility and Helper APIs
+
+### Table Type Checking
+
+{expand:title=Table Type Utilities}
+{code:c|title=Table Type Functions}
+/**
+ * Check if a table OID refers to a blockchain table
+ * 
+ * @param table_oid The table OID to check
+ * @return true if it's a blockchain table, false otherwise
+ */
+bool is_blockchain_table_oid(Oid table_oid);
+
+/**
+ * Check if a table name refers to a blockchain table
+ * 
+ * @param table_name Name of the table to check
+ * @return true if it's a blockchain table, false otherwise
+ */
+bool is_blockchain_table_name(const char *table_name);
+
+/**
+ * Get the relation kind for blockchain tables
+ * 
+ * @return RELKIND_BLOCKCHAIN_TABLE constant
+ */
+char get_blockchain_relkind(void);
+
+/**
+ * Convert a table name to its OID and verify it's a blockchain table
+ * 
+ * @param table_name Name of the table
+ * @return OID of the blockchain table
+ * @throws Error if table doesn't exist or is not a blockchain table
+ */
+Oid get_blockchain_table_oid_by_name(const char *table_name);
+{code}
+{expand}
+
+### Error Handling
+
+{expand:title=Error Handling Utilities}
+{code:c|title=Error Handling}
+/**
+ * Report an error for unsupported operations on blockchain tables
+ * 
+ * @param operation Name of the operation being attempted
+ * @param table_name Name of the blockchain table
+ * @param hint Optional hint for the user
+ */
+void blockchain_ereport_unsupported_operation(const char *operation,
+                                             const char *table_name,
+                                             const char *hint);
+
+/**
+ * Report a hash chain integrity error
+ * 
+ * @param table_name Name of the blockchain table
+ * @param counter Counter value where error occurred
+ * @param error_detail Detailed error message
+ */
+void blockchain_ereport_hash_chain_error(const char *table_name,
+                                        uint64 counter,
+                                        const char *error_detail);
+
+/**
+ * Report a counter system error
+ * 
+ * @param operation Operation that failed
+ * @param error_detail Detailed error message
+ */
+void blockchain_ereport_counter_error(const char *operation,
+                                     const char *error_detail);
+
+/**
+ * Set up error context for blockchain operations
+ * 
+ * @param callback Error context callback function
+ * @param arg Argument for the callback
+ */
+void blockchain_set_error_context(void (*callback)(void *arg), void *arg);
+{code}
+{expand}
+
+## Data Structures
+
+### Core Structures
+
+{expand:title=Key Data Structures}
+{code:c|title=Data Structure Definitions}
+/**
+ * System column definition structure
+ */
+typedef struct BlockchainColumnDef
+{
+    const char *colname;        // Column name (e.g., "__curr_hash")
+    Oid typeid;                 // PostgreSQL type OID
+    int32 typmod;               // Type modifier
+    int attnum;                 // Attribute number in relation
+    bool is_hidden;             // Hidden from SELECT * queries
+    const char *description;    // Human-readable description
+} BlockchainColumnDef;
+
+/**
+ * System column values extracted from a tuple
+ */
+typedef struct BlockchainSystemColumnValues
+{
+    Datum row_id;               // __row_id (UUID)
+    Datum curr_hash;            // __curr_hash (bytea)
+    Datum prev_hash;            // __prev_hash (bytea)
+    Datum tx_type;              // __tx_type (text)
+    Datum tx_lsn;               // __tx_lsn (bigint)
+    Datum tx_origin;            // __tx_origin (UUID)
+    Datum tx_version;           // __tx_version (int4)
+    Datum is_latest;            // __is_latest (bool)
+    Datum tx_timestamp;         // __tx_timestamp (timestamptz)
+    
+    bool row_id_isnull;         // Null flags for each column
+    bool curr_hash_isnull;
+    bool prev_hash_isnull;
+    bool tx_type_isnull;
+    bool tx_lsn_isnull;
+    bool tx_origin_isnull;
+    bool tx_version_isnull;
+    bool is_latest_isnull;
+    bool tx_timestamp_isnull;
+} BlockchainSystemColumnValues;
+
+/**
+ * Hash chain link information
+ */
+typedef struct BlockchainChainLinkInfo
+{
+    uint64 counter;             // Counter value for this link
+    bytea *curr_hash;           // Current hash
+    bytea *prev_hash;           // Previous hash
+    TimestampTz timestamp;      // Timestamp when row was created
+    bool hash_valid;            // Whether the hash is valid
+    char *error_message;        // Error message if hash is invalid
+} BlockchainChainLinkInfo;
+
+/**
+ * Counter system statistics
+ */
+typedef struct BlockchainCounterStats
+{
+    uint64 global_counter;      // Current global counter value
+    int num_tables;             // Number of registered tables
+    Size shared_mem_size;       // Size of shared memory used
+    TimestampTz last_persist;   // Last persistence timestamp
+    int pending_recoveries;     // Number of tables needing recovery
+    uint64 total_increments;    // Total counter increments since startup
+} BlockchainCounterStats;
+{code}
+{expand}
+
+### Constants and Macros
+
+{expand:title=Constants and Utility Macros}
+{code:c|title=Constants and Macros}
+/* Relation kind for blockchain tables */
+#define RELKIND_BLOCKCHAIN_TABLE 'b'
+
+/* Maximum number of blockchain tables (configurable) */
+#define MAX_BLOCKCHAIN_TABLES 1000
+
+/* System column name prefixes */
+#define BLOCKCHAIN_SYSTEM_COLUMN_PREFIX "__"
+
+/* Hash digest length for SHA-256 */
+#define BLOCKCHAIN_HASH_LENGTH SHA256_DIGEST_LENGTH
+
+/* Counter file name */
+#define BLOCKCHAIN_COUNTER_FILENAME "blockchain_counter.dat"
+
+/* System column names */
+#define BLOCKCHAIN_ROW_ID_COLNAME "__row_id"
+#define BLOCKCHAIN_CURR_HASH_COLNAME "__curr_hash"
+#define BLOCKCHAIN_PREV_HASH_COLNAME "__prev_hash"
+#define BLOCKCHAIN_TX_TYPE_COLNAME "__tx_type"
+#define BLOCKCHAIN_TX_LSN_COLNAME "__tx_lsn"
+#define BLOCKCHAIN_TX_ORIGIN_COLNAME "__tx_origin"
+#define BLOCKCHAIN_TX_VERSION_COLNAME "__tx_version"
+#define BLOCKCHAIN_IS_LATEST_COLNAME "__is_latest"
+#define BLOCKCHAIN_TX_TIMESTAMP_COLNAME "__tx_timestamp"
+
+/* Utility macros */
+#define IsBlockchainSystemColumn(colname) \
+    (strncmp((colname), BLOCKCHAIN_SYSTEM_COLUMN_PREFIX, 2) == 0)
+
+#define BlockchainTableOidIsValid(oid) \
+    (OidIsValid(oid) && is_blockchain_table_oid(oid))
+
+/* Error context helper */
+#define BLOCKCHAIN_ERROR_CONTEXT_INIT(callback_func, context_data) \
+    do { \
+        ErrorContextCallback error_context; \
+        error_context.callback = (callback_func); \
+        error_context.arg = (context_data); \
+        error_context.previous = error_context_stack; \
+        error_context_stack = &error_context;
+        
+#define BLOCKCHAIN_ERROR_CONTEXT_END() \
+        error_context_stack = error_context.previous; \
+    } while(0)
+{code}
+{expand}
+
+## Integration Examples
+
+### Extension Development Example
+
+{expand:title=Complete Extension Example}
+{code:c|title=Sample Blockchain Extension}
+#include "postgres.h"
+#include "fmgr.h"
+#include "blockchain/blockchainam.h"
+#include "blockchain/blockchain_hash.h"
+#include "blockchain/blockchain_counter.h"
+
+PG_MODULE_MAGIC;
+
+/* Function to get blockchain table information */
+PG_FUNCTION_INFO_V1(get_blockchain_table_info);
+
+Datum
+get_blockchain_table_info(PG_FUNCTION_ARGS)
+{
+    Oid table_oid = PG_GETARG_OID(0);
+    Relation rel;
+    TupleDesc tupdesc;
+    Datum values[4];
+    bool nulls[4] = {false, false, false, false};
+    HeapTuple tuple;
+    
+    /* Verify this is a blockchain table */
+    if (!is_blockchain_table_oid(table_oid))
+    {
+        ereport(ERROR,
+                (errcode(ERRCODE_WRONG_OBJECT_TYPE),
+                 errmsg("relation %u is not a blockchain table", table_oid)));
+    }
+    
+    /* Open the relation */
+    rel = relation_open(table_oid, AccessShareLock);
+    
+    /* Build result tuple descriptor */
+    tupdesc = CreateTemplateTupleDesc(4);
+    TupleDescInitEntry(tupdesc, (AttrNumber) 1, "table_name", TEXTOID, -1, 0);
+    TupleDescInitEntry(tupdesc, (AttrNumber) 2, "row_count", INT8OID, -1, 0);
+    TupleDescInitEntry(tupdesc, (AttrNumber) 3, "max_counter", INT8OID, -1, 0);
+    TupleDescInitEntry(tupdesc, (AttrNumber) 4, "chain_valid", BOOLOID, -1, 0);
+    
+    /* Get table information */
+    values[0] = CStringGetTextDatum(RelationGetRelationName(rel));
+    values[1] = Int64GetDatum(get_table_row_count(rel));
+    values[2] = Int64GetDatum(BlockchainScanTableForMaxCounter(rel));
+    values[3] = BoolGetDatum(verify_complete_hash_chain(rel, NULL, NULL));
+    
+    /* Create and return tuple */
+    tuple = heap_form_tuple(tupdesc, values, nulls);
+    
+    relation_close(rel, AccessShareLock);
+    
+    PG_RETURN_DATUM(HeapTupleGetDatum(tuple));
+}
+
+/* Helper function to count rows in a table */
+static int64
+get_table_row_count(Relation rel)
+{
+    TableScanDesc scan;
+    TupleTableSlot *slot;
+    int64 count = 0;
+    
+    scan = blockchain_scan_begin(rel, GetActiveSnapshot(), 0, NULL, NULL, 0);
+    slot = MakeSingleTupleTableSlot(RelationGetDescr(rel), &TTSOpsHeapTuple);
+    
+    while (blockchain_scan_getnextslot(scan, ForwardScanDirection, slot))
+    {
+        count++;
+        ExecClearTuple(slot);
+    }
+    
+    ExecDropSingleTupleTableSlot(slot);
+    blockchain_scan_end(scan);
+    
+    return count;
+}
+{code}
+{expand}
+
+### TAM Integration Example
+
+{expand:title=Custom TAM Function Example}
+{code:c|title=Custom TAM Function}
+/* Example of creating a custom function that works with blockchain TAM */
+PG_FUNCTION_INFO_V1(verify_table_hash_chain);
+
+Datum
+verify_table_hash_chain(PG_FUNCTION_ARGS)
+{
+    text *table_name_text = PG_GETARG_TEXT_PP(0);
+    char *table_name = text_to_cstring(table_name_text);
+    Oid table_oid;
+    Relation rel;
+    bool chain_valid;
+    int error_count = 0;
+    
+    /* Convert table name to OID and verify it's a blockchain table */
+    table_oid = get_blockchain_table_oid_by_name(table_name);
+    
+    /* Open the relation */
+    rel = relation_open(table_oid, AccessShareLock);
+    
+    /* Set up error context */
+    BLOCKCHAIN_ERROR_CONTEXT_INIT(hash_verification_error_context, &error_count);
+    
+    /* Verify the hash chain */
+    chain_valid = verify_complete_hash_chain(rel, count_verification_errors, &error_count);
+    
+    BLOCKCHAIN_ERROR_CONTEXT_END();
+    
+    relation_close(rel, AccessShareLock);
+    
+    /* Return result */
+    if (chain_valid && error_count == 0)
+        PG_RETURN_BOOL(true);
+    else
+        PG_RETURN_BOOL(false);
+}
+
+/* Error counting callback for hash verification */
+static void
+count_verification_errors(uint64 counter, const char *error_msg, void *context)
+{
+    int *error_count = (int *) context;
+    (*error_count)++;
+    
+    elog(WARNING, "Hash chain error at counter %lu: %s", counter, error_msg);
+}
+
+/* Error context callback */
+static void
+hash_verification_error_context(void *arg)
+{
+    int *error_count = (int *) arg;
+    errcontext("blockchain hash chain verification, %d errors found", *error_count);
+}
+{code}
+{expand}
+
+## Performance Considerations
+
+### API Performance Guidelines
+
+{tip:title=Performance Best Practices}
+**High-Performance APIs (< 1µs):**
+* `is_blockchain_table_oid()` - Cached table type checks
+* `BlockchainGetCurrentCounter()` - Read-only counter access
+* `is_blockchain_system_column()` - String comparison only
+
+**Medium-Performance APIs (1-10µs):**
+* `BlockchainGetNextCounter()` - Shared memory increment
+* `compute_curr_hash_with_counter()` - SHA-256 computation
+* System column population functions
+
+**Lower-Performance APIs (10µs+):**
+* `verify_complete_hash_chain()` - Full table verification
+* `BlockchainScanTableForMaxCounter()` - Full table scan
+* Recovery functions
+{tip}
+
+### Memory Management
+
+{panel:title=Memory Usage Guidelines|borderColor=#FF9800|titleBGColor=#FFF3E0}
+**Allocation Patterns:**
+* Use appropriate PostgreSQL memory contexts
+* Free temporary allocations promptly
+* Avoid memory leaks in error paths
+
+**Shared Memory:**
+* Counter system uses fixed allocation
+* No dynamic shared memory allocation
+* Efficient lock usage patterns
+
+**Performance Tips:**
+* Cache frequently accessed data
+* Minimize memory copying
+* Use stack allocation for small buffers
+{panel}
+
+## Related Documentation
+
+{section}
+{column:width=50%}
+{panel:title=📖 Architecture Documentation|borderColor=#2196F3|titleBGColor=#E3F2FD}
+* [Architecture Overview|Architecture - Architecture Overview]
+* [Blockchain Table Access Method|Architecture - Blockchain Table Access Method]
+* [Hash Chain System|Architecture - Hash Chain System]
+* [Counter Management|Architecture - Counter Management]
+{panel}
+{column}
+
+{column:width=50%}
+{panel:title=🔧 Developer Resources|borderColor=#4CAF50|titleBGColor=#E8F5E8}
+* [SQL Functions Reference|API Reference - SQL Functions Reference]
+* [Contributing Guide|Development - Contributing Guide]
+* [Extension Development Guide|Development - Extension Development]
+{panel}
+{column}
+{section}
+
+---
+
+{note:title=Complete C API Reference}
+This C API reference provides comprehensive documentation for all functions, structures, and interfaces needed to develop with, extend, or integrate the PostgreSQL Blockchain Extension at the C level.
+{note}
