@@ -23,6 +23,9 @@
 /* Maximum number of blockchain tables that can have counters */
 #define MAX_BLOCKCHAIN_TABLES 1024
 
+/* Maximum number of uncommitted hashes to cache */
+#define MAX_CACHED_HASHES 10000
+
 /* Counter entry for each blockchain table */
 typedef struct BlockchainCounterEntry
 {
@@ -32,11 +35,28 @@ typedef struct BlockchainCounterEntry
 	LWLock		lock;				/* Per-table counter lock */
 } BlockchainCounterEntry;
 
+/* Hash cache key for uncommitted blocks */
+typedef struct BlockchainHashKey
+{
+	Oid			table_oid;			/* OID of the blockchain table */
+	uint64		counter;			/* Counter value for this hash */
+} BlockchainHashKey;
+
+/* Hash cache entry for uncommitted blocks */
+typedef struct BlockchainHashEntry
+{
+	BlockchainHashKey key;			/* Hash key */
+	unsigned char hash_data[32];	/* The actual SHA256 hash (fixed 32 bytes) */
+	bool		valid;				/* Whether this hash is valid */
+} BlockchainHashEntry;
+
 /* Shared memory structure for blockchain counters */
 typedef struct BlockchainCounterData
 {
 	LWLock		ctl_lock;			/* Control lock for the hash table */
 	HTAB	   *counter_hash;		/* Hash table of counter entries */
+	LWLock		hash_cache_lock;	/* Lock for the hash cache */
+	HTAB	   *hash_cache;			/* Cache of uncommitted hashes */
 } BlockchainCounterData;
 
 /* Global pointer to shared memory data */
@@ -53,5 +73,9 @@ extern void BlockchainDropTableCounter(Oid table_oid);
 /* Counter persistence functions */
 extern void BlockchainCounterStartup(void);
 extern void BlockchainCounterShutdown(void);
+
+/* Hash cache functions for uncommitted blocks */
+extern void BlockchainStoreHash(Oid table_oid, uint64 counter, const unsigned char *hash);
+extern bool BlockchainGetCachedHash(Oid table_oid, uint64 counter, unsigned char *hash_out);
 
 #endif /* BLOCKCHAIN_COUNTER_H */

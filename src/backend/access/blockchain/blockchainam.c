@@ -155,7 +155,7 @@ static void SlotSetAttr(TupleTableSlot *slot, int attnum, Datum value);
 
 Datum generate_uuid_datum(void);
 int get_attnum_by_name(TupleDesc tupdesc, const char *name);
-static bytea * get_previous_hash(Relation rel);
+static bytea * get_previous_hash(Relation rel, uint64 current_counter);
 
 
 /* ------------------------------------------------------------------------
@@ -3013,28 +3013,32 @@ blockchainam_tuple_insert(Relation relation, TupleTableSlot *slot,
         virtualslot->tts_isnull[i] = slot->tts_isnull[i];
     }
     
-    /* Get previous hash - use cached if same relation (no locking needed for per-backend) */
-    bytea *prev_hash = NULL;
-    if (backend_insert_ctx->current_relid == RelationGetRelid(relation) && 
-        backend_insert_ctx->cached_hash)
+    /* Get previous hash using counter-based lookup to prevent branching
+     * IMPORTANT: We must query for (counter - 1) to ensure proper chain linkage
+     * in concurrent scenarios. Cannot use cache because each insert needs its
+     * specific predecessor based on the counter value. */
+    bytea *prev_hash = get_previous_hash(relation, counter);
+
+    /* Clear any old cached data if switching relations */
+    if (backend_insert_ctx->cached_hash &&
+        backend_insert_ctx->current_relid != RelationGetRelid(relation))
     {
-        prev_hash = backend_insert_ctx->cached_hash;
+        pfree(backend_insert_ctx->cached_hash);
+        backend_insert_ctx->cached_hash = NULL;
     }
-    else
-    {
-        prev_hash = get_previous_hash(relation);
-        /* Clear old cached data if switching relations */
-        if (backend_insert_ctx->cached_hash && backend_insert_ctx->current_relid != InvalidOid)
-        {
-            pfree(backend_insert_ctx->cached_hash);
-            backend_insert_ctx->cached_hash = NULL;
-        }
-        backend_insert_ctx->current_relid = RelationGetRelid(relation);
-    }
+    backend_insert_ctx->current_relid = RelationGetRelid(relation);
     
     /* Compute hash using counter instead of LSN */
     bytea *curr_hash = compute_curr_hash_with_counter(relation, slot, ts, prev_hash, counter);
-    
+
+    /* Store the hash in shared memory immediately so next transaction can use it
+     * This prevents hash branching in concurrent scenarios */
+    if (curr_hash && VARSIZE_ANY_EXHDR(curr_hash) == 32)
+    {
+        BlockchainStoreHash(RelationGetRelid(relation), counter,
+                           (const unsigned char *)VARDATA(curr_hash));
+    }
+
     // Initialize blockchain columns
     for (int i = base_attno; i < natts; i++)
     {
@@ -3246,79 +3250,111 @@ int get_attnum_by_name(TupleDesc tupdesc, const char *name)
 }
 
 bytea *
-get_previous_hash(Relation rel)
+get_previous_hash(Relation rel, uint64 current_counter)
 {
     bytea *prev_hash = NULL;
     char query[512];
     int spi_result;
     SPITupleTable *tuptable;
     bool isnull;
-    Datum max_hash_datum;
+    Datum prev_hash_datum;
     MemoryContext oldcontext;
-    
-    elog(DEBUG1, "get_previous_hash: START for relation %s", RelationGetRelationName(rel));
-    
-    /* Use SPI but with LIMIT to avoid full sort - most efficient for blockchain tables
-     * This does O(n) scan + O(1) limit rather than O(n log n) sort */
-    spi_result = SPI_connect();
-    if (spi_result != SPI_OK_CONNECT)
+    uint64 prev_counter = current_counter - 1;
+
+    elog(LOG, "get_previous_hash: START for relation %s, current_counter=%llu, looking for prev_counter=%llu",
+         RelationGetRelationName(rel), (unsigned long long)current_counter, (unsigned long long)prev_counter);
+
+    /* If this is the first block (counter == 1), return genesis hash */
+    if (current_counter == 1)
     {
-        elog(ERROR, "SPI_connect failed in get_previous_hash");
-    }
-    
-    PG_TRY();
-    {
-        /* Query for the hash with maximum __tx_lsn
-         * Uses aggregate MAX() which is O(n) scan, not O(n log n) sort */
-        snprintf(query, sizeof(query),
-                "SELECT __curr_hash FROM %s WHERE __tx_lsn = (SELECT MAX(__tx_lsn) FROM %s)",
-                RelationGetRelationName(rel), RelationGetRelationName(rel));
-        
-        elog(DEBUG2, "get_previous_hash: executing query: %s", query);
-        
-        spi_result = SPI_execute(query, true, 1);  /* read_only=true, limit=1 */
-        
-        if (spi_result == SPI_OK_SELECT && SPI_processed > 0)
-        {
-            tuptable = SPI_tuptable;
-            max_hash_datum = SPI_getbinval(tuptable->vals[0], tuptable->tupdesc, 1, &isnull);
-            
-            if (!isnull)
-            {
-                /* Copy the hash to a longer-lived memory context */
-                oldcontext = MemoryContextSwitchTo(CurTransactionContext);
-                prev_hash = (bytea *) datumCopy(max_hash_datum, false, -1);
-                MemoryContextSwitchTo(oldcontext);
-                
-                elog(DEBUG1, "get_previous_hash: found existing hash, size=%d", 
-                     VARSIZE(prev_hash));
-            }
-        }
-        
-        SPI_finish();
-    }
-    PG_CATCH();
-    {
-        /* Clean up SPI connection on error */
-        SPI_finish();
-        PG_RE_THROW();
-    }
-    PG_END_TRY();
-    
-    if (prev_hash == NULL)
-    {
-        /* First row ever - create genesis hash (all zeros) */
         oldcontext = MemoryContextSwitchTo(CurTransactionContext);
         prev_hash = palloc0(VARHDRSZ + 32); // 32 bytes for SHA256 hash
         SET_VARSIZE(prev_hash, VARHDRSZ + 32);
         memset(VARDATA(prev_hash), 0, 32);
         MemoryContextSwitchTo(oldcontext);
-        
-        elog(DEBUG1, "get_previous_hash: created genesis hash (all zeros)");
+
+        elog(LOG, "get_previous_hash: counter=1, returning genesis hash (all zeros)");
+        return prev_hash;
     }
-    
-    elog(DEBUG1, "get_previous_hash: END for relation %s", RelationGetRelationName(rel));
-    return prev_hash;
+
+    /* Retry loop to handle concurrent transactions
+     * We'll try up to 500 times with 2ms sleep between attempts (max 1 second wait) */
+    int max_retries = 500;
+    int retry_delay_ms = 2;
+    unsigned char cached_hash[32];
+
+    for (int retry = 0; retry < max_retries; retry++)
+    {
+        /* First, try shared memory cache (fast path) */
+        if (BlockchainGetCachedHash(rel->rd_id, prev_counter, cached_hash))
+        {
+            oldcontext = MemoryContextSwitchTo(CurTransactionContext);
+            prev_hash = palloc(VARHDRSZ + 32);
+            SET_VARSIZE(prev_hash, VARHDRSZ + 32);
+            memcpy(VARDATA(prev_hash), cached_hash, 32);
+            MemoryContextSwitchTo(oldcontext);
+
+            elog(LOG, "get_previous_hash: Found hash in cache for counter %llu (retry %d)",
+                 (unsigned long long)prev_counter, retry);
+            return prev_hash;
+        }
+
+        /* Cache miss - try database (for committed transactions) */
+        spi_result = SPI_connect();
+        if (spi_result != SPI_OK_CONNECT)
+        {
+            elog(ERROR, "SPI_connect failed in get_previous_hash");
+        }
+
+        PG_TRY();
+        {
+            snprintf(query, sizeof(query),
+                    "SELECT __curr_hash FROM %s WHERE __tx_lsn = %llu",
+                    RelationGetRelationName(rel), (unsigned long long)prev_counter);
+
+            spi_result = SPI_execute(query, true, 1);
+
+            if (spi_result == SPI_OK_SELECT && SPI_processed > 0)
+            {
+                tuptable = SPI_tuptable;
+                prev_hash_datum = SPI_getbinval(tuptable->vals[0], tuptable->tupdesc, 1, &isnull);
+
+                if (!isnull)
+                {
+                    oldcontext = MemoryContextSwitchTo(CurTransactionContext);
+                    prev_hash = (bytea *) datumCopy(prev_hash_datum, false, -1);
+                    MemoryContextSwitchTo(oldcontext);
+
+                    elog(LOG, "get_previous_hash: Found hash in DB for counter %llu (retry %d)",
+                         (unsigned long long)prev_counter, retry);
+                    SPI_finish();
+                    return prev_hash;
+                }
+            }
+
+            SPI_finish();
+        }
+        PG_CATCH();
+        {
+            SPI_finish();
+            PG_RE_THROW();
+        }
+        PG_END_TRY();
+
+        /* Not found yet - sleep and retry (unless this is the last attempt) */
+        if (retry < max_retries - 1)
+        {
+            pg_usleep(retry_delay_ms * 1000L);  /* Convert ms to microseconds */
+        }
+    }
+
+    /* After all retries, still not found - this is a serious error */
+    elog(ERROR, "get_previous_hash: Failed to find hash for counter %llu after %d retries. "
+         "Previous transaction (counter %llu) may have failed or is deadlocked.",
+         (unsigned long long)current_counter, max_retries, (unsigned long long)prev_counter);
+
+    /* Unreachable - elog(ERROR) doesn't return */
+    return NULL;
 }
 
 // Modified to accept prev_hash as parameter instead of computing it

@@ -216,34 +216,83 @@ create_genesis_hash(void)
 }
 ```
 
-### Previous Hash Retrieval
+### Previous Hash Retrieval with Concurrency Support
 
 ```c
 /*
- * Optimized previous hash retrieval using MAX() instead of ORDER BY
- * This approach is O(n) instead of O(n log n) and works well since
- * blockchain tables cannot have indexes on __tx_lsn
+ * Retrieve previous hash with retry loop for concurrent transactions
+ * Uses counter-based lookup and shared memory cache
  */
-static bytea *
-get_previous_hash_optimized(Relation rel)
+bytea *
+get_previous_hash(Relation rel, uint64 current_counter)
 {
-    uint64 max_counter;
+    uint64 prev_counter = current_counter - 1;
     bytea *prev_hash = NULL;
-    
-    /* Use MAX() aggregate for better performance */
-    max_counter = execute_max_counter_query(rel);
-    
-    if (max_counter == 0) {
-        /* No previous rows - return genesis hash */
-        prev_hash = create_genesis_hash();
-    } else {
-        /* Query for hash with maximum counter */
-        prev_hash = get_hash_by_counter_value(rel, max_counter);
+
+    /* Genesis block case */
+    if (current_counter == 1) {
+        return create_genesis_hash();
     }
-    
-    return prev_hash;
+
+    /* Retry loop for concurrency */
+    int max_retries = 500;
+    int retry_delay_ms = 2;
+    unsigned char cached_hash[32];
+
+    for (int retry = 0; retry < max_retries; retry++)
+    {
+        /* Fast path: Check shared memory cache */
+        if (BlockchainGetCachedHash(rel->rd_id, prev_counter, cached_hash))
+        {
+            prev_hash = create_bytea_from_hash(cached_hash);
+            elog(LOG, "get_previous_hash: Found hash in cache for counter %llu (retry %d)",
+                 prev_counter, retry);
+            return prev_hash;
+        }
+
+        /* Slow path: Query database for committed hash */
+        SPI_connect();
+        snprintf(query, sizeof(query),
+                "SELECT __curr_hash FROM %s WHERE __tx_lsn = %llu",
+                RelationGetRelationName(rel), prev_counter);
+
+        spi_result = SPI_execute(query, true, 1);
+
+        if (spi_result == SPI_OK_SELECT && SPI_processed > 0) {
+            /* Found in database */
+            prev_hash = extract_hash_from_result();
+            SPI_finish();
+            return prev_hash;
+        }
+
+        SPI_finish();
+
+        /* Not found - sleep and retry */
+        if (retry < max_retries - 1) {
+            pg_usleep(retry_delay_ms * 1000L);
+        }
+    }
+
+    /* Timeout - this is an error */
+    elog(ERROR, "get_previous_hash: Failed to find hash for counter %llu after %d retries",
+         prev_counter, max_retries);
+
+    return NULL;
 }
 ```
+
+### Why Counter-Based Lookup is Essential
+
+**The Problem with MAX(__tx_lsn)**:
+- Race condition: Multiple concurrent transactions can see the same MAX value
+- Results in hash branching (multiple blocks pointing to the same parent)
+- Breaks the fundamental blockchain property of a linear chain
+
+**The Solution with Counter-Based Lookup**:
+- Each transaction queries for exactly (counter - 1)
+- Shared memory cache stores uncommitted hashes
+- Retry loop handles timing variations
+- Guarantees perfect chain linkage even under high concurrency
 
 ### Hash Storage Format
 

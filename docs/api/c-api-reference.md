@@ -217,6 +217,33 @@ void BlockchainCounterStartup(void);
 void BlockchainCounterShutdown(void);
 ```
 
+### Hash Cache Functions (Concurrency Support)
+
+```c
+/*
+ * Store a hash in shared memory for an uncommitted block
+ * This allows the next transaction to read it before the block is committed
+ *
+ * Parameters:
+ *   table_oid: OID of the blockchain table
+ *   counter: Counter value for this hash
+ *   hash: Pointer to 32-byte SHA256 hash
+ */
+void BlockchainStoreHash(Oid table_oid, uint64 counter, const unsigned char *hash);
+
+/*
+ * Retrieve a hash from shared memory cache
+ *
+ * Parameters:
+ *   table_oid: OID of the blockchain table
+ *   counter: Counter value to look up
+ *   hash_out: Output buffer (must be 32 bytes)
+ *
+ * Returns: true if hash was found in cache, false otherwise
+ */
+bool BlockchainGetCachedHash(Oid table_oid, uint64 counter, unsigned char *hash_out);
+```
+
 ### Counter Data Structures
 
 ```c

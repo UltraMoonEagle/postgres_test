@@ -87,6 +87,8 @@ BlockchainCounterShmemSize(void)
 	size = MAXALIGN(sizeof(BlockchainCounterData));
 	size = add_size(size, hash_estimate_size(MAX_BLOCKCHAIN_TABLES,
 											  sizeof(BlockchainCounterEntry)));
+	size = add_size(size, hash_estimate_size(MAX_CACHED_HASHES,
+											  sizeof(BlockchainHashEntry)));
 
 	return size;
 }
@@ -112,6 +114,8 @@ BlockchainCounterShmemInit(void)
 		/* First time through, so initialize */
 		LWLockInitialize(&BlockchainCounterShmem->ctl_lock,
 						 LWTRANCHE_FIRST_USER_DEFINED);
+		LWLockInitialize(&BlockchainCounterShmem->hash_cache_lock,
+						 LWTRANCHE_FIRST_USER_DEFINED + 2);
 
 		/* Create hash table for counter entries */
 		MemSet(&hash_ctl, 0, sizeof(hash_ctl));
@@ -125,6 +129,18 @@ BlockchainCounterShmemInit(void)
 						  MAX_BLOCKCHAIN_TABLES,
 						  &hash_ctl,
 						  HASH_ELEM | HASH_FUNCTION);
+
+		/* Create hash table for uncommitted hash cache */
+		MemSet(&hash_ctl, 0, sizeof(hash_ctl));
+		hash_ctl.keysize = sizeof(BlockchainHashKey);
+		hash_ctl.entrysize = sizeof(BlockchainHashEntry);
+
+		BlockchainCounterShmem->hash_cache =
+			ShmemInitHash("Blockchain Hash Cache",
+						  MAX_CACHED_HASHES,
+						  MAX_CACHED_HASHES,
+						  &hash_ctl,
+						  HASH_ELEM | HASH_BLOBS);
 	}
 }
 
@@ -584,7 +600,7 @@ blockchain_xact_callback(XactEvent event, void *arg)
 }
 
 /*
- * blockchain_subxact_callback - Handle subtransaction events  
+ * blockchain_subxact_callback - Handle subtransaction events
  */
 static void
 blockchain_subxact_callback(SubXactEvent event, SubTransactionId mySubid,
@@ -592,4 +608,80 @@ blockchain_subxact_callback(SubXactEvent event, SubTransactionId mySubid,
 {
 	/* For now, we don't handle subtransactions specially */
 	/* Main transaction callback will handle the rollback */
+}
+
+/*
+ * BlockchainStoreHash
+ *		Store a hash in shared memory for an uncommitted block
+ *		This allows the next transaction to read it before the block is committed
+ */
+void
+BlockchainStoreHash(Oid table_oid, uint64 counter, const unsigned char *hash)
+{
+	BlockchainHashKey key;
+	BlockchainHashEntry *entry;
+	bool found;
+
+	if (!BlockchainCounterShmem)
+		return;
+
+	key.table_oid = table_oid;
+	key.counter = counter;
+
+	LWLockAcquire(&BlockchainCounterShmem->hash_cache_lock, LW_EXCLUSIVE);
+
+	entry = (BlockchainHashEntry *) hash_search(BlockchainCounterShmem->hash_cache,
+												&key,
+												HASH_ENTER,
+												&found);
+
+	if (entry)
+	{
+		memcpy(entry->hash_data, hash, 32);
+		entry->valid = true;
+
+		elog(LOG, "BlockchainStoreHash: Stored hash for table_oid=%u, counter=%llu",
+			 table_oid, (unsigned long long)counter);
+	}
+
+	LWLockRelease(&BlockchainCounterShmem->hash_cache_lock);
+}
+
+/*
+ * BlockchainGetCachedHash
+ *		Retrieve a hash from shared memory cache
+ *		Returns true if found, false otherwise
+ */
+bool
+BlockchainGetCachedHash(Oid table_oid, uint64 counter, unsigned char *hash_out)
+{
+	BlockchainHashKey key;
+	BlockchainHashEntry *entry;
+	bool found = false;
+
+	if (!BlockchainCounterShmem)
+		return false;
+
+	key.table_oid = table_oid;
+	key.counter = counter;
+
+	LWLockAcquire(&BlockchainCounterShmem->hash_cache_lock, LW_SHARED);
+
+	entry = (BlockchainHashEntry *) hash_search(BlockchainCounterShmem->hash_cache,
+												&key,
+												HASH_FIND,
+												NULL);
+
+	if (entry && entry->valid)
+	{
+		memcpy(hash_out, entry->hash_data, 32);
+		found = true;
+
+		elog(LOG, "BlockchainGetCachedHash: Found cached hash for table_oid=%u, counter=%llu",
+			 table_oid, (unsigned long long)counter);
+	}
+
+	LWLockRelease(&BlockchainCounterShmem->hash_cache_lock);
+
+	return found;
 }
