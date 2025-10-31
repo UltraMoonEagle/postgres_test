@@ -6,11 +6,404 @@ This document provides comprehensive reference for all SQL functions provided by
 
 ## Function Categories
 
+- [Query Result Anchoring Functions](#query-result-anchoring-functions) ⭐ **Core Feature**
 - [Table Management Functions](#table-management-functions)
 - [System Column Access Functions](#system-column-access-functions)
 - [Hash Chain Functions](#hash-chain-functions)
 - [Counter Management Functions](#counter-management-functions)
 - [Audit and Monitoring Functions](#audit-and-monitoring-functions)
+
+---
+
+## Query Result Anchoring Functions
+
+**Patent**: "Tamper-Evident Anchoring of Arbitrary SQL Query Results Using Blockchain Tables in Relational Databases"
+
+These functions implement tamper-evident anchoring of arbitrary SQL query results, enabling cryptographic proof that query results have not been modified.
+
+### create_anchor_table(table_name text)
+
+**Description**: Creates a blockchain table specifically designed for storing query anchors with metadata.
+
+**Category**: DDL / Table Creation
+
+**Parameters**:
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `table_name` | TEXT | Yes | Name of the blockchain anchor table to create |
+
+**Returns**: `TEXT` - Confirmation message
+
+**Errors**:
+- `ERROR: table name cannot be NULL` - table_name is NULL
+- `ERROR: invalid table name` - table_name contains invalid characters (quotes)
+- `ERROR: relation "table_name" already exists` - Table already exists
+
+**Created Table Schema**:
+```sql
+CREATE BLOCKCHAIN TABLE <table_name> (
+  query_id      TEXT NOT NULL,           -- Unique identifier for the query
+  query_text    TEXT NOT NULL,           -- The SQL query that was executed
+  result_hash   BYTEA NOT NULL,          -- SHA-256 hash of query result
+  anchor_time   TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- When anchored
+  user_id       TEXT NOT NULL DEFAULT CURRENT_USER,              -- Who anchored
+  notes         TEXT                     -- Optional notes/metadata
+  -- Plus 9 automatic system columns (__row_id, __curr_hash, etc.)
+);
+```
+
+**Example**:
+```sql
+-- Create anchor table for storing query results
+SELECT create_anchor_table('financial_report_anchors');
+-- Returns: 'Anchor table created successfully'
+
+-- Verify table was created
+\d financial_report_anchors
+```
+
+**Table Structure**:
+```
+                Table "public.financial_report_anchors"
+   Column    |           Type           | Nullable |        Default
+-------------+--------------------------+----------+------------------------
+ query_id    | text                     | not null |
+ query_text  | text                     | not null |
+ result_hash | bytea                    | not null |
+ anchor_time | timestamp with time zone | not null | CURRENT_TIMESTAMP
+ user_id     | text                     | not null | CURRENT_USER
+ notes       | text                     |          |
+
+System columns (hidden):
+ __row_id       | uuid
+ __curr_hash    | bytea
+ __prev_hash    | bytea
+ __tx_type      | text
+ __tx_lsn       | bigint
+ __tx_origin    | uuid
+ __tx_version   | integer
+ __is_latest    | boolean
+ __tx_timestamp | timestamp with time zone
+```
+
+**Notes**:
+- Creates a blockchain table (immutable, tamper-evident)
+- Automatically includes 9 system columns for blockchain functionality
+- Table cannot be modified or deleted (DDL protection)
+- Ideal for compliance, audit, and regulatory reporting
+
+**Related Functions**:
+- `anchor_query_result()` - Store query results in this table
+- `verify_query_anchor()` - Verify query results
+
+---
+
+### anchor_query_result(anchor_table text, query_id text, query_text text, notes text DEFAULT NULL)
+
+**Description**: Executes an arbitrary SQL query, deterministically serializes and sorts the result set, computes a SHA-256 hash, and stores it in a blockchain anchor table along with metadata.
+
+**Category**: Query Anchoring / Cryptographic Hashing
+
+**Parameters**:
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `anchor_table` | TEXT | Yes | - | Name of blockchain table to store anchors |
+| `query_id` | TEXT | Yes | - | Unique identifier for this query/anchor |
+| `query_text` | TEXT | Yes | - | The SQL query to execute and anchor |
+| `notes` | TEXT | No | NULL | Optional notes about this anchor |
+
+**Returns**: `BYTEA` - SHA-256 hash of the query result (32 bytes)
+
+**Algorithm**:
+1. Execute the SQL query using SPI (Server Programming Interface)
+2. Sort result tuples lexicographically by all columns (deterministic ordering)
+3. Serialize each tuple to text format
+4. Compute SHA-256 hash of serialized result set
+5. Store hash, query text, and metadata in blockchain anchor table
+
+**Deterministic Serialization**:
+```
+Hash = SHA256(
+  query_text ||
+  sorted_row_1_serialized ||
+  sorted_row_2_serialized ||
+  ...
+  sorted_row_N_serialized
+)
+```
+
+**Errors**:
+- `ERROR: anchor_table cannot be NULL` - anchor_table parameter is NULL
+- `ERROR: query_id cannot be NULL` - query_id parameter is NULL
+- `ERROR: query_text cannot be NULL` - query_text parameter is NULL
+- `ERROR: invalid anchor table name` - anchor_table contains invalid characters
+- `ERROR: Query execution failed: <code>` - SQL query failed to execute
+- `ERROR: Query returned no tuple table` - Query execution error
+- `ERROR: Failed to insert anchor: <code>` - Failed to insert into anchor table
+
+**Example**:
+```sql
+-- Create anchor table first
+SELECT create_anchor_table('financial_report_anchors');
+
+-- Anchor a simple query
+SELECT anchor_query_result(
+  'financial_report_anchors',
+  'q1_revenue_2025',
+  'SELECT department, SUM(revenue) FROM sales WHERE year = 2025 AND quarter = 1 GROUP BY department ORDER BY department',
+  'Q1 2025 revenue by department for annual report'
+);
+
+-- Returns: \x1a2b3c4d5e6f789a0b1c2d3e4f5678901a2b3c4d5e6f789a0b1c2d3e4f567890
+-- Also prints: INFO:  Anchoring query: q1_revenue_2025
+--              INFO:  Query anchor stored successfully with hash: <hex>
+```
+
+**Complex Query Examples**:
+```sql
+-- Anchor JOIN query
+SELECT anchor_query_result(
+  'financial_report_anchors',
+  'customer_summary_fy25',
+  $$
+    SELECT c.customer_id, c.name, COUNT(o.order_id) AS order_count, SUM(o.amount) AS total_amount
+    FROM customers c
+    JOIN orders o ON c.customer_id = o.customer_id
+    WHERE o.order_date BETWEEN '2025-01-01' AND '2025-12-31'
+    GROUP BY c.customer_id, c.name
+    ORDER BY c.customer_id
+  $$,
+  'FY2025 customer transaction summary for audit'
+);
+
+-- Anchor aggregation query
+SELECT anchor_query_result(
+  'financial_report_anchors',
+  'monthly_sales_2025',
+  $$
+    SELECT date_trunc('month', sale_date) AS month,
+           SUM(amount) AS total_sales,
+           COUNT(*) AS transaction_count
+    FROM sales
+    WHERE sale_date BETWEEN '2025-01-01' AND '2025-12-31'
+    GROUP BY month
+    ORDER BY month
+  $$,
+  'Monthly sales totals for 2025'
+);
+```
+
+**Verification Workflow**:
+```sql
+-- 1. Anchor query result
+SELECT anchor_query_result(
+  'financial_report_anchors',
+  'q1_revenue_2025',
+  'SELECT department, SUM(revenue) FROM sales WHERE year = 2025 AND quarter = 1 GROUP BY department ORDER BY department',
+  'Q1 2025 revenue'
+);
+
+-- 2. View stored anchor
+SELECT query_id, anchor_time, user_id, encode(result_hash, 'hex') AS hash
+FROM financial_report_anchors
+WHERE query_id = 'q1_revenue_2025';
+
+-- 3. Later, verify integrity (see verify_query_anchor)
+SELECT verify_query_anchor('financial_report_anchors', 'q1_revenue_2025');
+```
+
+**Notes**:
+- **Deterministic**: Same query + same data = same hash (reproducible)
+- **Query Complexity**: Supports JOINs, aggregations, subqueries, CTEs, window functions
+- **Performance**: Hash computation time scales with result set size
+- **Transaction Safety**: Executes in read-only mode, does not modify source data
+- **Uniqueness**: query_id should be unique per anchor (no enforced constraint)
+- **Use Cases**: Compliance reporting, audit trails, regulatory snapshots, data integrity proofs
+
+**Performance Considerations**:
+```sql
+-- Large result sets (millions of rows) may take seconds to hash
+-- Consider limiting result sets or using summary queries
+
+-- Example: Hash summary instead of raw data
+SELECT anchor_query_result(
+  'financial_report_anchors',
+  'daily_summary_2025',
+  'SELECT date, SUM(amount), COUNT(*) FROM sales GROUP BY date ORDER BY date',
+  'Daily summaries instead of raw transactions'
+);
+```
+
+---
+
+### verify_query_anchor(anchor_table text, query_id text)
+
+**Description**: Verifies the integrity of a previously anchored query by re-executing the query, recomputing the hash, and comparing it with the stored hash. Returns TRUE if verification passes (hashes match), FALSE if tampering is detected.
+
+**Category**: Verification / Integrity Checking
+
+**Parameters**:
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `anchor_table` | TEXT | Yes | Name of blockchain anchor table |
+| `query_id` | TEXT | Yes | The query identifier to verify |
+
+**Returns**: `BOOLEAN`
+- `TRUE` - Verification passed (hashes match, data unchanged)
+- `FALSE` - Verification failed (hashes differ, data tampered or changed)
+
+**Verification Algorithm**:
+1. Retrieve stored `query_text` and `result_hash` from anchor table
+2. Re-execute the original query
+3. Recompute hash using same deterministic algorithm
+4. Compare stored hash with computed hash
+5. Return TRUE if match, FALSE if mismatch
+
+**Errors**:
+- `ERROR: anchor_table cannot be NULL` - anchor_table parameter is NULL
+- `ERROR: query_id cannot be NULL` - query_id parameter is NULL
+- `ERROR: invalid anchor table name` - anchor_table contains invalid characters
+- `ERROR: No anchor found for query_id: <id>` - query_id not found in anchor table
+- `ERROR: Query execution failed during verification` - Query re-execution failed
+
+**Example**:
+```sql
+-- Verify a previously anchored query
+SELECT verify_query_anchor('financial_report_anchors', 'q1_revenue_2025');
+-- Returns: true (if data unchanged)
+-- Returns: false (if data modified)
+
+-- Also prints:
+-- INFO:  Verifying query anchor: q1_revenue_2025
+-- INFO:  Stored hash: <hex>
+-- INFO:  Computed hash: <hex>
+-- INFO:  Verification result: PASSED (or FAILED)
+```
+
+**Verification Scenarios**:
+
+**Scenario 1: Data Unchanged (Verification Passes)**
+```sql
+-- Original anchoring
+SELECT anchor_query_result(
+  'financial_report_anchors',
+  'q1_revenue_2025',
+  'SELECT department, SUM(revenue) FROM sales WHERE year = 2025 AND quarter = 1 GROUP BY department ORDER BY department',
+  'Q1 2025 revenue'
+);
+
+-- Later verification (no changes to sales data)
+SELECT verify_query_anchor('financial_report_anchors', 'q1_revenue_2025');
+-- Returns: true ✓
+-- INFO: Verification result: PASSED
+```
+
+**Scenario 2: Data Modified (Verification Fails)**
+```sql
+-- Original anchoring
+SELECT anchor_query_result(
+  'financial_report_anchors',
+  'q1_revenue_2025',
+  'SELECT department, SUM(revenue) FROM sales WHERE year = 2025 AND quarter = 1 GROUP BY department ORDER BY department',
+  'Q1 2025 revenue'
+);
+
+-- Someone modifies the source data (tampering!)
+UPDATE sales SET revenue = revenue * 1.1 WHERE year = 2025 AND quarter = 1;
+
+-- Verification detects tampering
+SELECT verify_query_anchor('financial_report_anchors', 'q1_revenue_2025');
+-- Returns: false ✗
+-- INFO: Verification result: FAILED
+-- INFO: Hash mismatch - data may have been tampered with
+```
+
+**Comprehensive Verification Example**:
+```sql
+-- Verify all anchored queries
+SELECT
+  query_id,
+  anchor_time,
+  user_id,
+  verify_query_anchor('financial_report_anchors', query_id) AS verified,
+  CASE
+    WHEN verify_query_anchor('financial_report_anchors', query_id) THEN 'PASS'
+    ELSE 'FAIL - TAMPERING DETECTED'
+  END AS status
+FROM financial_report_anchors
+ORDER BY anchor_time DESC;
+```
+
+**Sample Output**:
+```
+     query_id      |        anchor_time         |   user_id   | verified |        status
+-------------------+----------------------------+-------------+----------+----------------------
+ q1_revenue_2025   | 2025-08-12 10:30:00+00     | analyst_1   | t        | PASS
+ monthly_sales_2025| 2025-08-12 09:15:00+00     | analyst_2   | t        | PASS
+ customer_summary  | 2025-08-11 14:20:00+00     | manager_1   | f        | FAIL - TAMPERING DETECTED
+```
+
+**Automated Verification Script**:
+```sql
+-- Create verification report
+DO $$
+DECLARE
+  r RECORD;
+  failed_count INTEGER := 0;
+BEGIN
+  FOR r IN SELECT query_id FROM financial_report_anchors LOOP
+    IF NOT verify_query_anchor('financial_report_anchors', r.query_id) THEN
+      RAISE WARNING 'VERIFICATION FAILED for query_id: %', r.query_id;
+      failed_count := failed_count + 1;
+    END IF;
+  END LOOP;
+
+  IF failed_count > 0 THEN
+    RAISE EXCEPTION 'Verification failed for % queries - data tampering detected!', failed_count;
+  ELSE
+    RAISE NOTICE 'All queries verified successfully - data integrity confirmed';
+  END IF;
+END $$;
+```
+
+**Notes**:
+- **Performance**: Verification requires re-executing the query (can be slow for complex queries)
+- **Data Changes**: Any change to source data will cause verification to fail
+- **Deterministic**: Uses exact same hashing algorithm as `anchor_query_result()`
+- **Use Cases**: Regular integrity checks, audit compliance, forensic investigation
+- **Best Practice**: Run verification regularly (e.g., daily, weekly) to detect tampering
+- **False Positives**: Legitimate data updates will cause verification to fail (expected behavior)
+
+**Verification Best Practices**:
+```sql
+-- Schedule regular verification (using cron or pg_cron)
+-- Example: Verify all anchors daily
+
+-- 1. Create verification log table
+CREATE TABLE anchor_verification_log (
+  verification_time TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  query_id TEXT,
+  verification_result BOOLEAN,
+  stored_hash BYTEA,
+  computed_hash BYTEA
+);
+
+-- 2. Run verification and log results
+INSERT INTO anchor_verification_log (query_id, verification_result)
+SELECT query_id, verify_query_anchor('financial_report_anchors', query_id)
+FROM financial_report_anchors;
+
+-- 3. Alert on failures
+SELECT * FROM anchor_verification_log
+WHERE verification_result = false
+  AND verification_time > NOW() - INTERVAL '1 day';
+```
+
+**Related Functions**:
+- `create_anchor_table()` - Create anchor storage table
+- `anchor_query_result()` - Anchor query results
+
+---
 
 ## Table Management Functions
 

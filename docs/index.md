@@ -244,7 +244,7 @@ Choose your path based on your role:
 
     Source code, issues, and discussions
 
-    [:octicons-arrow-right-24: View on GitHub](https://github.com/your-org/apostgres)
+    [:octicons-arrow-right-24: View on GitHub](https://github.com/UltraMoonEagle/postgres_test)
 
 -   :material-forum:{ .lg .middle } **Discussions**
 
@@ -252,7 +252,7 @@ Choose your path based on your role:
 
     Ask questions and share ideas
 
-    [:octicons-arrow-right-24: Join Discussions](https://github.com/your-org/apostgres/discussions)
+    [:octicons-arrow-right-24: Join Discussions](https://github.com/UltraMoonEagle/postgres_test/discussions)
 
 -   :material-bug:{ .lg .middle } **Issues**
 
@@ -260,7 +260,7 @@ Choose your path based on your role:
 
     Report bugs and request features
 
-    [:octicons-arrow-right-24: Report Issues](https://github.com/your-org/apostgres/issues)
+    [:octicons-arrow-right-24: Report Issues](https://github.com/UltraMoonEagle/postgres_test/issues)
 
 -   :material-email:{ .lg .middle } **Contact**
 

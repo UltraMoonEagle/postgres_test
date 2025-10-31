@@ -4,7 +4,6 @@ mkdocs-material>=9.4.0
 
 # Essential plugins
 mkdocs-git-revision-date-localized-plugin>=1.2.0
-mkdocs-git-committers-plugin-2>=1.2.0
 mkdocs-minify-plugin>=0.7.0
 mkdocs-glightbox>=0.3.0
 

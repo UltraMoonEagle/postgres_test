@@ -43,3 +43,29 @@ lib*.pc
 /Release/
 /tmp_install/
 /portlock/
+
+# Documentation build artifacts
+/site/
+.cache/
+
+# PDF and Office documents
+*.pdf
+*.docx
+*.doc
+*.odt
+*.~lock.*
+
+# Redundant documentation files (content already in docs/)
+LLD_PostgreSQL_Blockchain_Extension_*.md
+QUERY_ANCHORING_DOCUMENTATION.md
+QUICK_REFERENCE.md
+SHOWCASE_REFERENCE.md
+FEATURE_INVENTORY.md
+INVENTORY_SUMMARY.md
+README_INVENTORY.md
+ARCHITECTURE.md
+BLOCKCHAIN_CONCURRENCY_FIX.md
+files_to_ignore.txt
+COMMIT_SUMMARY.md
+CLEAN_COMMIT_GUIDE.md
+DOCUMENTATION_SUMMARY.md

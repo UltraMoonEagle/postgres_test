@@ -1,0 +1,5 @@
+# blockchain_anchor extension
+comment = 'Query Result Anchoring for Blockchain Tables - Patent Implementation'
+default_version = '1.0'
+module_pathname = '$libdir/postgres'
+relocatable = true

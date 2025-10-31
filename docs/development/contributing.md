@@ -19,7 +19,7 @@ Before contributing, ensure you have:
 
 1. **Clone the Repository**:
 ```bash
-git clone https://github.com/your-org/apostgres.git
+git clone https://github.com/UltraMoonEagle/postgres_test.git
 cd apostgres
 ```
 

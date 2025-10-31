@@ -12589,56 +12589,6 @@
     prorettype => 'void',
     proargtypes => 'text text',
     prosrc => 'anchor_bc_query'
-},
-
-# blockchain function to create anchor table
-{
-    oid => 9003,
-    descr => 'Create a blockchain table for storing query anchors',
-    proname => 'create_anchor_table',
-    prolang => 'internal',
-    procost => '1',
-    prorows => '0',
-    provariadic => '0',
-    provolatile => 'v',
-    proparallel => 'u',
-    prorettype => 'text',
-    proargtypes => 'text',
-    prosrc => 'create_anchor_table'
-},
-
-# blockchain function to anchor arbitrary query results
-{
-    oid => 9004,
-    descr => 'Anchor arbitrary SQL query result with metadata into blockchain table',
-    proname => 'anchor_query_result',
-    prolang => 'internal',
-    procost => '100',
-    prorows => '0',
-    provariadic => '0',
-    provolatile => 'v',
-    proparallel => 'u',
-    prorettype => 'bytea',
-    proargtypes => 'text text text text',
-    proargnames => '{anchor_table,query_id,query_text,notes}',
-    prosrc => 'anchor_query_result'
-},
-
-# blockchain function to verify anchored query results
-{
-    oid => 9005,
-    descr => 'Verify integrity of anchored query result by recomputing hash',
-    proname => 'verify_query_anchor',
-    prolang => 'internal',
-    procost => '100',
-    prorows => '0',
-    provariadic => '0',
-    provolatile => 'v',
-    proparallel => 'u',
-    prorettype => 'bool',
-    proargtypes => 'text text',
-    proargnames => '{anchor_table,query_id}',
-    prosrc => 'verify_query_anchor'
 }
 
 

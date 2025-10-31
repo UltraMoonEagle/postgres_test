@@ -1,11 +1,11 @@
 site_name: PostgreSQL Blockchain Extension Documentation
 site_description: Comprehensive documentation for the PostgreSQL Blockchain Table Extension
 site_author: PostgreSQL Blockchain Extension Team
-site_url: https://your-org.github.io/apostgres/
+site_url: https://ultrammooneagle.github.io/postgres_test/
 
 # Repository
-repo_name: your-org/apostgres
-repo_url: https://github.com/your-org/apostgres
+repo_name: UltraMoonEagle/postgres_test
+repo_url: https://github.com/UltraMoonEagle/postgres_test
 edit_uri: edit/master/docs/
 
 # Copyright
@@ -62,9 +62,6 @@ plugins:
       lang: en
   - git-revision-date-localized:
       type: date
-  - git-committers:
-      repository: your-org/apostgres
-      branch: master
   - minify:
       minify_html: true
   - glightbox:
@@ -106,8 +103,8 @@ markdown_extensions:
   - pymdownx.magiclink:
       normalize_issue_symbols: true
       repo_url_shorthand: true
-      user: your-org
-      repo: apostgres
+      user: UltraMoonEagle
+      repo: postgres_test
   - pymdownx.mark
   - pymdownx.smartsymbols
   - pymdownx.snippets:
@@ -133,51 +130,77 @@ nav:
   - Getting Started:
     - Overview: getting-started/overview.md
     - Quick Start: getting-started/quick-start.md
-    - Installation: deployment/installation.md
-    - Configuration: deployment/configuration.md
-  - Architecture:
-    - High-Level Design: HLD_PostgreSQL_Blockchain_Extension.md
-    - System Overview: architecture/index.md
-    - Table Access Method: architecture/blockchain-access-method.md
-    - Hash Chain System: architecture/hash-chain-system.md
-    - Counter Management: architecture/counter-management.md
-    - Immutability Enforcement: architecture/immutability-enforcement.md
-  - API Reference:
-    - API Overview: api/index.md
-    - C API Reference: api/c-api-reference.md
-    - SQL Functions: api/sql-functions-reference.md
-    - System Catalogs: api/system-catalogs.md
+    - Installation: getting-started/installation.md
+    - First Blockchain Table: getting-started/first-table.md
   - User Guide:
     - User Guide Overview: user-guide/index.md
     - Creating Blockchain Tables: user-guide/creating-tables.md
-    - Working with Data: user-guide/working-with-data.md
+    - Inserting Data: user-guide/inserting-data.md
+    - Querying Data: user-guide/querying-data.md
     - System Columns: user-guide/system-columns.md
-    - Security Features: user-guide/security-features.md
+    - Query Anchoring: user-guide/query-anchoring.md
+    - Verification: user-guide/verification.md
     - Best Practices: user-guide/best-practices.md
-  - Development:
-    - Contributing: development/contributing.md
+  - Examples:
+    - Examples Overview: examples/index.md
+    - Basic CRUD Operations: examples/basic-usage.md
+    - Concurrent Insertions: examples/concurrent-inserts.md
+    - Query Result Anchoring: examples/query-anchoring.md
+    - Chain Verification: examples/verification.md
+    - Audit Logging: examples/audit-logging.md
+    - Financial Records: examples/financial-records.md
+    - Troubleshooting Scenarios: examples/troubleshooting.md
+  - Architecture:
+    - System Overview: architecture/index.md
+    - High-Level Design: architecture/high-level-design.md
+    - Table Access Method: architecture/blockchain-access-method.md
+    - Hash Chain System: architecture/hash-chain-system.md
+    - Counter Management: architecture/counter-management.md
+    - Shared Memory Cache: architecture/shared-memory.md
+    - Query Anchoring: architecture/query-anchoring-architecture.md
+    - Immutability Enforcement: architecture/immutability-enforcement.md
+    - Data Flow Diagrams: architecture/data-flow.md
+  - Developer Guide:
+    - Developer Overview: development/index.md
     - Development Setup: development/setup.md
-    - Testing Guide: development/testing-guide.md
+    - Code Structure: development/code-structure.md
+    - Key Functions: development/key-functions.md
+    - Building & Testing: development/building.md
     - Debugging Guide: development/debugging.md
     - Performance Testing: development/performance-testing.md
+    - Contributing: development/contributing.md
+  - API Reference:
+    - API Overview: api/index.md
+    - SQL Functions: api/sql-functions-reference.md
+    - C API Reference: api/c-api-reference.md
+    - System Columns Reference: api/system-columns-reference.md
+    - Configuration Parameters: api/configuration.md
+  - Verification & Testing:
+    - Testing Overview: testing/index.md
+    - Unit Tests: testing/unit-tests.md
+    - Integration Tests: testing/integration-tests.md
+    - Chain Verification: testing/chain-verification.md
+    - Concurrency Tests: testing/concurrency-tests.md
+    - Performance Benchmarks: testing/performance.md
   - Deployment:
     - Deployment Overview: deployment/index.md
     - Installation Guide: deployment/installation.md
     - Configuration: deployment/configuration.md
-    - Migration Guide: deployment/migration.md
+    - PostgreSQL Settings: deployment/pg-configuration.md
     - Monitoring: deployment/monitoring.md
+    - Backup & Recovery: deployment/backup-recovery.md
     - Troubleshooting: deployment/troubleshooting.md
-  - Examples:
-    - Examples Overview: examples/index.md
-    - Basic Usage: examples/basic-usage.md
-    - Audit Logging: examples/audit-logging.md
-    - Financial Records: examples/financial-records.md
-    - Compliance Use Cases: examples/compliance.md
+  - Security & Compliance:
+    - Security Overview: security/index.md
+    - Immutability Guarantees: security/immutability.md
+    - Cryptographic Integrity: security/cryptography.md
+    - Audit Compliance: security/compliance.md
+    - Threat Model: security/threat-model.md
   - Reference:
     - Changelog: reference/changelog.md
     - FAQ: reference/faq.md
     - Glossary: reference/glossary.md
-    - Performance Benchmarks: reference/performance.md
+    - Known Limitations: reference/limitations.md
 
 # Extra CSS and JavaScript
 extra_css:
@@ -192,7 +215,7 @@ extra_javascript:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/your-org/apostgres
+      link: https://github.com/UltraMoonEagle/postgres_test
       name: GitHub Repository
     - icon: fontawesome/solid/paper-plane
       link: mailto:contact@example.com

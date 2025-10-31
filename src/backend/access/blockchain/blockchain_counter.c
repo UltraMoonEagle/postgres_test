@@ -640,8 +640,9 @@ BlockchainStoreHash(Oid table_oid, uint64 counter, const unsigned char *hash)
 		memcpy(entry->hash_data, hash, 32);
 		entry->valid = true;
 
-		elog(LOG, "BlockchainStoreHash: Stored hash for table_oid=%u, counter=%llu",
-			 table_oid, (unsigned long long)counter);
+		elog(LOG, "BlockchainStoreHash: Stored hash %02x%02x%02x%02x... for table_oid=%u, counter=%llu, PID=%d",
+			 entry->hash_data[0], entry->hash_data[1], entry->hash_data[2], entry->hash_data[3],
+			 table_oid, (unsigned long long)counter, MyProcPid);
 	}
 
 	LWLockRelease(&BlockchainCounterShmem->hash_cache_lock);
@@ -677,8 +678,14 @@ BlockchainGetCachedHash(Oid table_oid, uint64 counter, unsigned char *hash_out)
 		memcpy(hash_out, entry->hash_data, 32);
 		found = true;
 
-		elog(LOG, "BlockchainGetCachedHash: Found cached hash for table_oid=%u, counter=%llu",
-			 table_oid, (unsigned long long)counter);
+		elog(LOG, "BlockchainGetCachedHash: Found cached hash %02x%02x%02x%02x... for table_oid=%u, counter=%llu, PID=%d",
+			 hash_out[0], hash_out[1], hash_out[2], hash_out[3],
+			 table_oid, (unsigned long long)counter, MyProcPid);
+	}
+	else
+	{
+		elog(LOG, "BlockchainGetCachedHash: NOT FOUND for table_oid=%u, counter=%llu, PID=%d",
+			 table_oid, (unsigned long long)counter, MyProcPid);
 	}
 
 	LWLockRelease(&BlockchainCounterShmem->hash_cache_lock);

@@ -57,7 +57,7 @@ jobs:
           mkdocs build --verbose --strict
           
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: documentation-site
           path: site/
@@ -72,12 +72,12 @@ jobs:
     needs: build
     steps:
       - name: Setup Pages
-        uses: actions/configure-pages@v3
+        uses: actions/configure-pages@v4
         
       - name: Download build artifacts
         uses: actions/download-artifact@v3
         with:
-          name: documentation-site
+          name: documentation-site  
           path: site/
           
       - name: Upload to GitHub Pages

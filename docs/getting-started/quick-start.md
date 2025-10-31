@@ -383,7 +383,7 @@ If you encounter issues:
 
 1. Check the [FAQ](../reference/faq.md)
 2. Review the [Troubleshooting Guide](../deployment/troubleshooting.md)  
-3. Search [GitHub Issues](https://github.com/your-org/apostgres/issues)
+3. Search [GitHub Issues](https://github.com/UltraMoonEagle/postgres_test/issues)
 4. Open a new issue if needed
 
 ---
