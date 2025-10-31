@@ -2,14 +2,14 @@ name: Build and Deploy Documentation
 
 on:
   push:
-    branches: [ master, main ]
+    branches: [ documentation ]
     paths:
       - 'docs/**'
       - 'mkdocs.yml'
       - 'requirements.txt'
       - '.github/workflows/docs.yml'
   pull_request:
-    branches: [ master, main ]
+    branches: [ documentation ]
     paths:
       - 'docs/**'
       - 'mkdocs.yml'
@@ -64,7 +64,7 @@ jobs:
           
   # Deployment job (only on push to main/master)
   deploy:
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/documentation' || github.ref == 'refs/heads/documentation')
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

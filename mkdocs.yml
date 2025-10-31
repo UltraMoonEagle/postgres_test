@@ -6,7 +6,7 @@ site_url: https://ultrammooneagle.github.io/postgres_test/
 # Repository
 repo_name: UltraMoonEagle/postgres_test
 repo_url: https://github.com/UltraMoonEagle/postgres_test
-edit_uri: edit/master/docs/
+edit_uri: edit/documentation/docs/
 
 # Copyright
 copyright: Copyright &copy; 2025 PostgreSQL Blockchain Extension Contributors
