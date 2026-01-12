@@ -86,11 +86,11 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/postgres_blockchain.git
+git clone https://github.com/UltraMoonEagle/postgres_test.git
 cd postgres_blockchain
 
 # Or download a specific release
-wget https://github.com/your-org/postgres_blockchain/archive/refs/tags/v1.0.tar.gz
+wget https://github.com/UltraMoonEagle/postgres_test/archive/refs/tags/v1.0.tar.gz
 tar -xzf v1.0.tar.gz
 cd postgres_blockchain-1.0
 ```

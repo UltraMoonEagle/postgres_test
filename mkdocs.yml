@@ -49,6 +49,7 @@ theme:
     - content.tabs.link
     - content.tooltips
     - content.action.edit
+    - content.mermaid
     - toc.follow
     - toc.integrate
   icon:
@@ -138,6 +139,7 @@ nav:
     - Inserting Data: user-guide/inserting-data.md
     - Querying Data: user-guide/querying-data.md
     - System Columns: user-guide/system-columns.md
+    - Phantom Blocks: user-guide/phantom-blocks.md
     - Query Anchoring: user-guide/query-anchoring.md
     - Verification: user-guide/verification.md
     - Best Practices: user-guide/best-practices.md
@@ -157,6 +159,7 @@ nav:
     - Hash Chain System: architecture/hash-chain-system.md
     - Counter Management: architecture/counter-management.md
     - Shared Memory Cache: architecture/shared-memory.md
+    - Phantom Block System: architecture/phantom-blocks.md
     - Query Anchoring: architecture/query-anchoring-architecture.md
     - Immutability Enforcement: architecture/immutability-enforcement.md
     - Data Flow Diagrams: architecture/data-flow.md
@@ -210,6 +213,8 @@ extra_javascript:
   - javascripts/mathjax.js
   - https://polyfill.io/v3/polyfill.min.js?features=es6
   - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+  - https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js
+  - javascripts/mermaid-init.js
 
 # Social links
 extra:

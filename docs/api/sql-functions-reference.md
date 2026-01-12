@@ -641,6 +641,213 @@ SELECT * FROM compute_row_hash('audit_log', 1001);
 - `hash_matches` will be false if data has been tampered with
 - Computationally expensive for large rows
 
+## Phantom Blocks
+
+Phantom blocks maintain hash chain integrity when transactions roll back. These functions allow querying and managing rolled-back transaction hashes.
+
+### blockchain_recover_phantom_blocks()
+
+**Description**: Manually trigger recovery of phantom blocks from the append-only log file. Normally this happens automatically on server startup, but this function allows manual recovery.
+
+**Category**: System Maintenance / Recovery
+
+**Parameters**: None
+
+**Returns**: `TEXT` - Recovery status message
+
+**Behavior**:
+1. Reads `$PGDATA/global/blockchain_phantom.log` file
+2. Builds hash table of all log entries
+3. Creates `blockchain_phantom_blocks` table if it doesn't exist
+4. Inserts entries with final status='R' (rolled back) into table
+5. Truncates log file after successful recovery
+
+**Example**:
+```sql
+-- Manually trigger phantom block recovery
+SELECT blockchain_recover_phantom_blocks();
+
+-- Returns: 'Recovery complete: 8 phantom blocks restored'
+```
+
+**Sample Output**:
+```
+                   blockchain_recover_phantom_blocks
+-------------------------------------------------------------------------
+ Recovery complete: 8 rolled-back phantom blocks inserted into table
+```
+
+**Notes**:
+- **Idempotent**: Safe to call multiple times
+- **Automatic**: Called automatically on first database connection after server start
+- **Graceful**: Server starts even if recovery fails (logs warning)
+- **Log location**: `$PGDATA/global/blockchain_phantom.log`
+- **Entry size**: 84 bytes per transaction (fixed size)
+
+**When to use**:
+- Debugging phantom block issues
+- Force recovery after manual log file manipulation
+- Verifying phantom block system is working
+- Generally not needed - automatic recovery handles normal cases
+
+**Related Tables**:
+- `blockchain_phantom_blocks` - Target table for recovered blocks
+
+### Query blockchain_phantom_blocks Table
+
+**Description**: The `blockchain_phantom_blocks` table stores hashes from rolled-back transactions. This is a regular PostgreSQL table, not a blockchain table.
+
+**Schema**:
+```sql
+CREATE TABLE blockchain_phantom_blocks (
+    table_oid       OID,                     -- Table OID
+    counter         BIGINT,                  -- Counter value
+    prev_hash       BYTEA,                   -- Previous block hash (32 bytes)
+    computed_hash   BYTEA,                   -- This block's hash (32 bytes)
+    status          TEXT DEFAULT 'ABORTED',  -- Transaction status
+    xid             XID,                     -- PostgreSQL transaction ID
+    created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+**Example Queries**:
+
+```sql
+-- View all phantom blocks for a specific table
+SELECT
+    table_oid::regclass AS table_name,
+    counter,
+    status,
+    encode(prev_hash, 'hex') AS prev_hash,
+    encode(computed_hash, 'hex') AS computed_hash,
+    xid
+FROM blockchain_phantom_blocks
+WHERE table_oid = 'my_blockchain_table'::regclass::oid
+ORDER BY counter;
+
+-- Count phantom blocks per table
+SELECT
+    table_oid::regclass AS table_name,
+    COUNT(*) AS phantom_count,
+    MIN(counter) AS first_phantom,
+    MAX(counter) AS last_phantom
+FROM blockchain_phantom_blocks
+GROUP BY table_oid
+ORDER BY phantom_count DESC;
+
+-- Total phantom blocks in database
+SELECT COUNT(*) AS total_phantom_blocks
+FROM blockchain_phantom_blocks;
+
+-- Check for gaps in sequence (phantom blocks fill these gaps)
+WITH all_counters AS (
+    SELECT __tx_lsn AS counter, 'COMMITTED' AS type
+    FROM my_blockchain_table
+    UNION ALL
+    SELECT counter, 'PHANTOM' AS type
+    FROM blockchain_phantom_blocks
+    WHERE table_oid = 'my_blockchain_table'::regclass::oid
+)
+SELECT * FROM all_counters ORDER BY counter;
+```
+
+**Sample Output**:
+```
+ table_name | counter | status  |            prev_hash             |          computed_hash           |  xid
+------------+---------+---------+----------------------------------+----------------------------------+-------
+ audit_log  |       4 | ABORTED | def456789abc012345678901234567... | ghi789abc012345678901234567... | 12345
+ audit_log  |       7 | ABORTED | jkl012345678901234567890123456... | mno345678901234567890123456... | 12346
+```
+
+**Notes**:
+- Phantom blocks preserve hash chain integrity across rollbacks
+- Each entry represents a rolled-back transaction
+- `status` is always 'ABORTED' for phantom blocks
+- Hashes are stored as binary (BYTEA), use `encode(hash, 'hex')` for readability
+
+### export_hash_chain(table_name text)
+
+**Description**: Export complete hash chain including both committed rows and phantom blocks in sequence order. Updated to include phantom block entries.
+
+**Category**: Verification / Export
+
+**Parameters**:
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `table_name` | TEXT | Yes | Name of the blockchain table |
+
+**Returns**: TABLE(seq BIGINT, chain_status TEXT, is_valid BOOLEAN, curr_hash_hex TEXT, prev_hash_hex TEXT)
+
+**Column Descriptions**:
+- `seq`: Counter/sequence number
+- `chain_status`: One of 'GENESIS', 'LINKED', 'PHANTOM'
+- `is_valid`: TRUE if hash link is valid, FALSE if broken
+- `curr_hash_hex`: Current hash as hex string
+- `prev_hash_hex`: Previous hash as hex string
+
+**Example**:
+```sql
+-- Export complete chain with phantom blocks
+SELECT * FROM export_hash_chain('audit_log');
+```
+
+**Sample Output**:
+```
+ seq | chain_status | is_valid |                curr_hash_hex                 |               prev_hash_hex
+-----+--------------+----------+----------------------------------------------+----------------------------------------------
+   1 | GENESIS      | t        | abc123def456789abc012345678901234567890... | 000000000000000000000000000000000000000...
+   2 | LINKED       | t        | def456789abc012345678901234567890123456... | abc123def456789abc012345678901234567890...
+   3 | LINKED       | t        | ghi789abc012345678901234567890123456789... | def456789abc012345678901234567890123456...
+   4 | PHANTOM      | t        | jkl012345678901234567890123456789012345... | ghi789abc012345678901234567890123456789...
+   5 | LINKED       | t        | mno345678901234567890123456789012345678... | jkl012345678901234567890123456789012345...
+```
+
+**Interpretation**:
+- **GENESIS**: First block (counter 1), prev_hash is all zeros
+- **LINKED**: Committed transaction with valid hash link
+- **PHANTOM**: Rolled-back transaction maintaining chain integrity
+- **is_valid = t**: All hash links are cryptographically correct
+
+**Notes**:
+- Phantom blocks appear in their correct sequence position
+- All rows showing `is_valid = t` means complete chain integrity
+- Use this to verify that rollbacks didn't break the hash chain
+- Returns complete ordered sequence with no gaps
+
+**Algorithm**:
+```sql
+-- Simplified implementation
+WITH all_entries AS (
+    SELECT __tx_lsn AS counter, 'COMMITTED' AS status,
+           __curr_hash, __prev_hash
+    FROM my_blockchain_table
+
+    UNION ALL
+
+    SELECT counter, 'PHANTOM' AS status,
+           computed_hash AS __curr_hash, prev_hash AS __prev_hash
+    FROM blockchain_phantom_blocks
+    WHERE table_oid = 'my_blockchain_table'::regclass::oid
+)
+SELECT
+    counter AS seq,
+    CASE
+        WHEN counter = 1 THEN 'GENESIS'
+        WHEN status = 'PHANTOM' THEN 'PHANTOM'
+        ELSE 'LINKED'
+    END AS chain_status,
+    (__prev_hash = LAG(__curr_hash) OVER (ORDER BY counter)
+     OR counter = 1) AS is_valid,
+    encode(__curr_hash, 'hex') AS curr_hash_hex,
+    encode(__prev_hash, 'hex') AS prev_hash_hex
+FROM all_entries
+ORDER BY counter;
+```
+
+**Related Functions**:
+- `verify_hash_chain()` - Verify chain integrity (also checks phantom blocks)
+- `blockchain_recover_phantom_blocks()` - Restore phantom blocks from log
+
 ## Counter Management Functions
 
 ### get_blockchain_counters()
