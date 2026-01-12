@@ -333,7 +333,7 @@ BEGIN
             CREATE OR REPLACE FUNCTION verify_hash_chain(table_name text)
             RETURNS TABLE(
                 total_rows bigint,
-                broken_links bigint, 
+                broken_links bigint,
                 chain_integrity text,
                 details text
             )
@@ -345,6 +345,7 @@ BEGIN
                 query_text text;
                 row_count bigint;
                 broken_count bigint;
+                phantom_table_exists boolean;
             BEGIN
                 -- Parse schema and table name
                 IF position('.' in table_name) > 0 THEN
@@ -353,41 +354,83 @@ BEGIN
                 ELSE
                     relation_name := table_name;
                 END IF;
-                
+
                 -- First check if table is a blockchain table
                 IF NOT is_blockchain_table(table_name) THEN
                     RAISE EXCEPTION 'Table % is not a blockchain table', table_name;
                 END IF;
-                
+
                 -- Get total row count
                 query_text := format('SELECT COUNT(*) FROM %s.%s', schema_name, relation_name);
                 EXECUTE query_text INTO row_count;
-                
-                -- Check hash chain integrity using the same logic as run_concurrent_tests.sh
-                query_text := format($q$
-                    WITH hash_check AS (
-                        SELECT 
-                            __tx_lsn,
-                            __prev_hash,
-                            LAG(__curr_hash) OVER (ORDER BY __tx_lsn) as expected_prev_hash
-                        FROM %s.%s
-                        ORDER BY __tx_lsn
-                    )
-                    SELECT COUNT(*) FILTER (WHERE __tx_lsn > 1 AND __prev_hash != expected_prev_hash)
-                    FROM hash_check
-                $q$, schema_name, relation_name);
-                
+
+                -- Check if blockchain_phantom_blocks table exists
+                SELECT EXISTS(
+                    SELECT 1 FROM pg_tables
+                    WHERE schemaname = 'public'
+                    AND tablename = 'blockchain_phantom_blocks'
+                ) INTO phantom_table_exists;
+
+                -- Check hash chain integrity
+                IF phantom_table_exists THEN
+                    -- Include phantom blocks in verification
+                    query_text := format($q$
+                        WITH combined_chain AS (
+                            -- Committed rows
+                            SELECT
+                                __tx_lsn as counter,
+                                __prev_hash as prev_hash,
+                                __curr_hash as curr_hash
+                            FROM %s.%s
+
+                            UNION ALL
+
+                            -- Phantom blocks (rolled back transactions)
+                            SELECT
+                                counter,
+                                prev_hash,
+                                computed_hash as curr_hash
+                            FROM blockchain_phantom_blocks
+                            WHERE table_oid = '%s.%s'::regclass::oid
+                        ),
+                        hash_check AS (
+                            SELECT
+                                counter,
+                                prev_hash,
+                                LAG(curr_hash) OVER (ORDER BY counter) as expected_prev_hash
+                            FROM combined_chain
+                            ORDER BY counter
+                        )
+                        SELECT COUNT(*) FILTER (WHERE counter > 1 AND prev_hash != expected_prev_hash)
+                        FROM hash_check
+                    $q$, schema_name, relation_name, schema_name, relation_name);
+                ELSE
+                    -- Only check committed rows (no phantom blocks yet)
+                    query_text := format($q$
+                        WITH hash_check AS (
+                            SELECT
+                                __tx_lsn as counter,
+                                __prev_hash as prev_hash,
+                                LAG(__curr_hash) OVER (ORDER BY __tx_lsn) as expected_prev_hash
+                            FROM %s.%s
+                            ORDER BY __tx_lsn
+                        )
+                        SELECT COUNT(*) FILTER (WHERE counter > 1 AND prev_hash != expected_prev_hash)
+                        FROM hash_check
+                    $q$, schema_name, relation_name);
+                END IF;
+
                 EXECUTE query_text INTO broken_count;
-                
+
                 RETURN QUERY
-                SELECT 
+                SELECT
                     row_count,
                     broken_count,
-                    CASE 
+                    CASE
                         WHEN broken_count = 0 THEN 'PASS: Hash chain intact'
                         ELSE 'FAIL: Broken hash chain detected'
                     END::text as chain_integrity,
-                    CASE 
+                    CASE
                         WHEN row_count = 0 THEN 'Empty table - no hash chain to verify'
                         WHEN row_count = 1 THEN 'Single row - hash chain trivially valid'
                         WHEN broken_count = 0 THEN format('All %s hash links are valid', row_count - 1)
@@ -403,16 +446,17 @@ BEGIN
             RETURNS TABLE(
                 seq bigint,
                 curr_hash_hex text,
-                prev_hash_hex text, 
+                prev_hash_hex text,
                 chain_status text,
                 is_valid boolean
             )
-            LANGUAGE plpgsql  
+            LANGUAGE plpgsql
             AS $func$
             DECLARE
                 schema_name text := 'public';
                 relation_name text;
                 query_text text;
+                phantom_table_exists boolean;
             BEGIN
                 -- Parse schema and table name
                 IF position('.' in table_name) > 0 THEN
@@ -421,41 +465,102 @@ BEGIN
                 ELSE
                     relation_name := table_name;
                 END IF;
-                
+
                 -- Check if table is a blockchain table
                 IF NOT is_blockchain_table(table_name) THEN
                     RAISE EXCEPTION 'Table % is not a blockchain table', table_name;
                 END IF;
-                
-                -- Export hash chain with validation (based on run_concurrent_tests.sh logic)
-                query_text := format($q$
-                    WITH hash_chain AS (
-                        SELECT 
-                            __tx_lsn,
-                            encode(__curr_hash, 'hex') as curr_hash_hex,
-                            encode(__prev_hash, 'hex') as prev_hash_hex,
-                            LAG(encode(__curr_hash, 'hex')) OVER (ORDER BY __tx_lsn) as expected_prev_hex,
-                            CASE 
-                                WHEN __tx_lsn = 1 THEN 'GENESIS'
-                                ELSE 'LINKED'
-                            END as chain_status
-                        FROM %s.%s
-                        ORDER BY __tx_lsn
-                    )
-                    SELECT 
-                        __tx_lsn as seq,
-                        curr_hash_hex,
-                        prev_hash_hex,
-                        chain_status,
-                        CASE 
-                            WHEN __tx_lsn = 1 THEN true  -- Genesis is always valid
-                            WHEN prev_hash_hex = expected_prev_hex THEN true
-                            ELSE false
-                        END as is_valid
-                    FROM hash_chain
-                    ORDER BY __tx_lsn
-                $q$, schema_name, relation_name);
-                
+
+                -- Check if blockchain_phantom_blocks table exists
+                SELECT EXISTS(
+                    SELECT 1 FROM pg_tables
+                    WHERE schemaname = 'public'
+                    AND tablename = 'blockchain_phantom_blocks'
+                ) INTO phantom_table_exists;
+
+                -- Export hash chain with validation
+                IF phantom_table_exists THEN
+                    -- Include phantom blocks
+                    query_text := format($q$
+                        WITH combined_chain AS (
+                            -- Committed rows
+                            SELECT
+                                __tx_lsn as counter,
+                                encode(__curr_hash, 'hex') as curr_hash_hex,
+                                encode(__prev_hash, 'hex') as prev_hash_hex,
+                                'COMMITTED' as source
+                            FROM %s.%s
+
+                            UNION ALL
+
+                            -- Phantom blocks (rolled back transactions)
+                            SELECT
+                                counter,
+                                encode(computed_hash, 'hex') as curr_hash_hex,
+                                encode(prev_hash, 'hex') as prev_hash_hex,
+                                'PHANTOM' as source
+                            FROM blockchain_phantom_blocks
+                            WHERE table_oid = '%s.%s'::regclass::oid
+                        ),
+                        hash_chain AS (
+                            SELECT
+                                counter,
+                                curr_hash_hex,
+                                prev_hash_hex,
+                                source,
+                                LAG(curr_hash_hex) OVER (ORDER BY counter) as expected_prev_hex,
+                                CASE
+                                    WHEN counter = 1 THEN 'GENESIS'
+                                    WHEN source = 'PHANTOM' THEN 'PHANTOM'
+                                    ELSE 'LINKED'
+                                END as chain_status
+                            FROM combined_chain
+                            ORDER BY counter
+                        )
+                        SELECT
+                            counter as seq,
+                            curr_hash_hex,
+                            prev_hash_hex,
+                            chain_status,
+                            CASE
+                                WHEN counter = 1 THEN true  -- Genesis is always valid
+                                WHEN prev_hash_hex = expected_prev_hex THEN true
+                                ELSE false
+                            END as is_valid
+                        FROM hash_chain
+                        ORDER BY counter
+                    $q$, schema_name, relation_name, schema_name, relation_name);
+                ELSE
+                    -- Only committed rows (no phantom blocks)
+                    query_text := format($q$
+                        WITH hash_chain AS (
+                            SELECT
+                                __tx_lsn as counter,
+                                encode(__curr_hash, 'hex') as curr_hash_hex,
+                                encode(__prev_hash, 'hex') as prev_hash_hex,
+                                LAG(encode(__curr_hash, 'hex')) OVER (ORDER BY __tx_lsn) as expected_prev_hex,
+                                CASE
+                                    WHEN __tx_lsn = 1 THEN 'GENESIS'
+                                    ELSE 'LINKED'
+                                END as chain_status
+                            FROM %s.%s
+                            ORDER BY __tx_lsn
+                        )
+                        SELECT
+                            counter as seq,
+                            curr_hash_hex,
+                            prev_hash_hex,
+                            chain_status,
+                            CASE
+                                WHEN counter = 1 THEN true  -- Genesis is always valid
+                                WHEN prev_hash_hex = expected_prev_hex THEN true
+                                ELSE false
+                            END as is_valid
+                        FROM hash_chain
+                        ORDER BY counter
+                    $q$, schema_name, relation_name);
+                END IF;
+
                 RETURN QUERY EXECUTE query_text;
             END;
             $func$;

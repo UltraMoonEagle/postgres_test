@@ -202,35 +202,41 @@ The patent implementation ensures reproducible hashes regardless of query execut
 
 ```mermaid
 graph TD
-    subgraph Input [Input Data]
-        A[Query Result<br/>Row 3: B, 300<br/>Row 1: A, 100<br/>Row 2: C, 200]
+    subgraph Input ["Input Data"]
+        A["Query Result<br>Row 3: B, 300<br>Row 1: A, 100<br>Row 2: C, 200"]
     end
 
-    subgraph Sort [Deterministic Sorting]
-        B[qsort_arg with<br/>compare_tuples]
-        C[Sorted Result<br/>Row 1: A, 100<br/>Row 2: C, 200<br/>Row 3: B, 300]
+    subgraph Sort ["Deterministic Sorting"]
+        B["qsort_arg with<br>compare_tuples"]
+        C["Sorted Result<br>Row 1: A, 100<br>Row 2: C, 200<br>Row 3: B, 300"]
     end
 
-    subgraph Serialize [Serialization]
-        D[Tuple 1: A|100]
-        E[Tuple 2: C|200]
-        F[Tuple 3: B|300]
+    subgraph Serialize ["Serialization"]
+        D["Tuple 1: A|100"]
+        E["Tuple 2: C|200"]
+        F["Tuple 3: B|300"]
     end
 
-    subgraph Hash [SHA-256 Computation]
-        G[SHA-256 Context]
-        H[Update: query_text]
-        I[Update: A|100]
-        J[Update: C|200]
-        K[Update: B|300]
-        L[Finalize: 32-byte hash]
+    subgraph Hash ["SHA-256 Computation"]
+        G["SHA-256 Context"]
+        H["Update: query_text"]
+        I["Update: A|100"]
+        J["Update: C|200"]
+        K["Update: B|300"]
+        L["Finalize: 32-byte hash"]
     end
 
     A --> B --> C
-    C --> D & E & F
+    C --> D
+    C --> E
+    C --> F
     D --> G
-    G --> H --> I --> J --> K --> L
-    L --> M[0x3abb974851d8201b...]
+    G --> H
+    H --> I
+    I --> J
+    J --> K
+    K --> L
+    L --> M["0x3abb974851d8201b..."]
 
     style A fill:#ffebee
     style C fill:#e8f5e9
@@ -277,7 +283,7 @@ sequenceDiagram
 
     Note over VerifyFunc,AnchorTable: Step 1: Retrieve Anchor
     VerifyFunc->>SPI: SPI_connect()
-    VerifyFunc->>AnchorTable: SELECT query_text, result_hash<br/>WHERE query_id='q1'<br/>ORDER BY anchor_time DESC LIMIT 1
+    VerifyFunc->>AnchorTable: SELECT query_text, result_hash WHERE query_id='q1'
     AnchorTable-->>VerifyFunc: stored_query_text, stored_hash
     VerifyFunc->>VerifyFunc: Copy to upper memory context
     VerifyFunc->>SPI: SPI_finish()
@@ -288,7 +294,7 @@ sequenceDiagram
     SPI-->>VerifyFunc: SPI_tuptable, SPI_processed
 
     Note over VerifyFunc,HashEngine: Step 3: Recompute Hash
-    VerifyFunc->>HashEngine: hash_query_result_deterministic(<br/>stored_query_text, SPI_tuptable, SPI_processed)
+    VerifyFunc->>HashEngine: hash_query_result_deterministic()
     HashEngine->>HashEngine: Sort result tuples
     HashEngine->>HashEngine: Serialize tuples
     HashEngine->>HashEngine: SHA-256 computation
@@ -299,14 +305,11 @@ sequenceDiagram
     Note over VerifyFunc: Step 4: Compare Hashes
     alt Hashes Match
         VerifyFunc->>VerifyFunc: stored_hash == computed_hash
-        VerifyFunc->>Client: INFO: ✓ Verification PASSED<br/>Return TRUE
+        VerifyFunc->>Client: Verification PASSED - Return TRUE
     else Hashes Differ
         VerifyFunc->>VerifyFunc: stored_hash != computed_hash
-        VerifyFunc->>Client: WARNING: ✗ Verification FAILED<br/>Return FALSE
+        VerifyFunc->>Client: Verification FAILED - Return FALSE
     end
-
-    style VerifyFunc fill:#e1f5ff
-    style HashEngine fill:#fff9c4
 ```
 
 ### Verification Decision Tree
@@ -512,8 +515,8 @@ This diagram shows how all components work together for a concurrent INSERT scen
 
 ```mermaid
 sequenceDiagram
-    participant T1 as Transaction 1<br/>(counter=100)
-    participant T2 as Transaction 2<br/>(counter=101)
+    participant T1 as Transaction 1 (counter=100)
+    participant T2 as Transaction 2 (counter=101)
     participant Counter as Counter System
     participant Cache as Hash Cache
     participant Heap as Heap Storage

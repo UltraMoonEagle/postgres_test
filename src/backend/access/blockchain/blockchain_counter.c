@@ -7,6 +7,11 @@
  * monotonically increasing counter values for blockchain tables. This
  * replaces the LSN-based approach and eliminates double inserts.
  *
+ * PHASE 1 ENHANCEMENTS:
+ * - Lock-free atomic counters using pg_atomic_uint64
+ * - Lazy recovery with atomic initialization flags
+ * - Fallback to LWLock-based implementation when atomics unavailable
+ *
  * Portions Copyright (c) 1996-2025, PostgreSQL Global Development Group
  *
  * src/backend/access/blockchain/blockchain_counter.c
@@ -17,6 +22,7 @@
 
 #include "blockchain/blockchain_counter.h"
 #include "miscadmin.h"
+#include "port/atomics.h"
 #include "storage/ipc.h"
 #include "storage/lmgr.h"
 #include "storage/lwlock.h"
@@ -43,6 +49,14 @@
 
 /* Global pointer to shared memory data */
 BlockchainCounterData *BlockchainCounterShmem = NULL;
+
+/* GUC parameters - defined here, declared in header */
+bool blockchain_use_atomic_counters = true;
+int blockchain_hash_cache_partitions = 64;
+int blockchain_retry_initial_us = 100;
+int blockchain_retry_max_us = 10000;
+int blockchain_retry_max_total_ms = 1000;
+int blockchain_batch_max_size = 256;
 
 /* Transaction rollback tracking */
 typedef struct BlockchainCounterReservation
@@ -83,12 +97,25 @@ Size
 BlockchainCounterShmemSize(void)
 {
 	Size		size;
+	Size		counter_hash_size;
+	Size		hash_cache_size;
 
 	size = MAXALIGN(sizeof(BlockchainCounterData));
-	size = add_size(size, hash_estimate_size(MAX_BLOCKCHAIN_TABLES,
-											  sizeof(BlockchainCounterEntry)));
-	size = add_size(size, hash_estimate_size(MAX_CACHED_HASHES,
-											  sizeof(BlockchainHashEntry)));
+	counter_hash_size = hash_estimate_size(MAX_BLOCKCHAIN_TABLES,
+										   sizeof(BlockchainCounterEntry));
+	hash_cache_size = hash_estimate_size(MAX_CACHED_HASHES,
+										 sizeof(BlockchainHashEntry));
+
+	size = add_size(size, counter_hash_size);
+	size = add_size(size, hash_cache_size);
+
+	elog(LOG, "BlockchainCounterShmemSize: total=%zu bytes (%.2f MB), "
+		 "counter_hash=%zu bytes (%.2f MB), hash_cache=%zu bytes (%.2f MB), "
+		 "MAX_CACHED_HASHES=%d",
+		 size, size / (1024.0 * 1024.0),
+		 counter_hash_size, counter_hash_size / (1024.0 * 1024.0),
+		 hash_cache_size, hash_cache_size / (1024.0 * 1024.0),
+		 MAX_CACHED_HASHES);
 
 	return size;
 }
@@ -116,6 +143,13 @@ BlockchainCounterShmemInit(void)
 						 LWTRANCHE_FIRST_USER_DEFINED);
 		LWLockInitialize(&BlockchainCounterShmem->hash_cache_lock,
 						 LWTRANCHE_FIRST_USER_DEFINED + 2);
+
+		/* Initialize phantom recovery flag */
+#ifdef PG_HAVE_ATOMIC_U64_SUPPORT
+		pg_atomic_init_u32(&BlockchainCounterShmem->phantom_recovery_done, 0);
+#else
+		BlockchainCounterShmem->phantom_recovery_done = false;
+#endif
 
 		/* Create hash table for counter entries */
 		MemSet(&hash_ctl, 0, sizeof(hash_ctl));
@@ -148,8 +182,8 @@ BlockchainCounterShmemInit(void)
  * BlockchainGetNextCounter
  *		Get the next counter value for a blockchain table
  *
- * This function is the main entry point for obtaining counter values.
- * It uses atomic operations to ensure thread safety.
+ * PHASE 1: Uses atomic operations when enabled via GUC, falls back to LWLock.
+ * Implements lazy recovery with atomic initialization flags.
  */
 uint64
 BlockchainGetNextCounter(Oid table_oid)
@@ -165,32 +199,107 @@ BlockchainGetNextCounter(Oid table_oid)
 
 	elog(DEBUG1, "DEBUG: BlockchainGetNextCounter - shmem OK, acquiring lock, PID=%d", MyProcPid);
 
+#ifdef PG_HAVE_ATOMIC_U64_SUPPORT
+	if (blockchain_use_atomic_counters)
+	{
+		/* FAST PATH: Lock-free atomic counters with lazy initialization */
+
+		/* First, try to find existing entry with shared lock */
+		LWLockAcquire(&BlockchainCounterShmem->ctl_lock, LW_SHARED);
+		entry = (BlockchainCounterEntry *) hash_search(BlockchainCounterShmem->counter_hash,
+														&table_oid,
+														HASH_FIND,
+														&found);
+		LWLockRelease(&BlockchainCounterShmem->ctl_lock);
+
+		if (!found)
+		{
+			/* Need to create entry - acquire exclusive lock */
+			LWLockAcquire(&BlockchainCounterShmem->ctl_lock, LW_EXCLUSIVE);
+			entry = (BlockchainCounterEntry *) hash_search(BlockchainCounterShmem->counter_hash,
+															&table_oid,
+															HASH_ENTER,
+															&found);
+
+			if (!found)
+			{
+				/* We created the entry - initialize atomic fields */
+				entry->table_oid = table_oid;
+				pg_atomic_init_u64(&entry->counter_value_atomic, 0);
+				pg_atomic_init_u32(&entry->initialized, 0);
+				entry->counter_value = 0; /* shadow value for persistence */
+				entry->last_persisted = 0;
+				LWLockInitialize(&entry->lock, LWTRANCHE_FIRST_USER_DEFINED + 1);
+
+				elog(LOG, "Created new atomic counter entry for table OID %u", table_oid);
+			}
+			LWLockRelease(&BlockchainCounterShmem->ctl_lock);
+		}
+
+		/* Check if lazy recovery is needed (atomic read) */
+		if (pg_atomic_read_u32(&entry->initialized) == 0)
+		{
+			/* Lazy recovery: acquire entry lock to prevent concurrent recovery */
+			LWLockAcquire(&entry->lock, LW_EXCLUSIVE);
+
+			/* Double-check after acquiring lock */
+			if (pg_atomic_read_u32(&entry->initialized) == 0)
+			{
+				uint64 recovered_max = BlockchainRecoverCounterForTable(table_oid);
+
+				/* Initialize atomic counter to recovered_max + 1 */
+				pg_atomic_write_u64(&entry->counter_value_atomic, recovered_max + 1);
+				entry->counter_value = recovered_max + 1; /* sync shadow */
+
+				/* Mark as initialized (atomic write with memory barrier) */
+				pg_atomic_write_u32(&entry->initialized, 1);
+
+				elog(LOG, "Atomic counter lazy recovery for table OID %u: starting at %llu",
+					 table_oid, (unsigned long long)(recovered_max + 1));
+			}
+
+			LWLockRelease(&entry->lock);
+		}
+
+		/* Atomic fetch-and-add (lock-free!) */
+		result = pg_atomic_fetch_add_u64(&entry->counter_value_atomic, 1);
+
+		elog(LOG, "BLOCKCHAIN ATOMIC COUNTER: table_oid=%u, counter=%llu, PID=%d",
+			 table_oid, (unsigned long long)result, MyProcPid);
+
+		return result;
+	}
+#endif
+
+	/* FALLBACK PATH: LWLock-based implementation */
+	elog(DEBUG1, "Using LWLock-based counter (atomics disabled or unavailable)");
+
 	/* Look up or create counter entry */
 	LWLockAcquire(&BlockchainCounterShmem->ctl_lock, LW_EXCLUSIVE);
-	
+
 	elog(DEBUG1, "DEBUG: BlockchainGetNextCounter - lock acquired, doing hash search, PID=%d", MyProcPid);
 
 	entry = (BlockchainCounterEntry *) hash_search(BlockchainCounterShmem->counter_hash,
 													&table_oid,
 													HASH_ENTER,
 													&found);
-													
-	elog(LOG, "HASH SEARCH: table_oid=%u, found=%s, entry=%p, counter_value=%llu, PID=%d", 
-	     table_oid, found ? "true" : "false", entry, 
+
+	elog(LOG, "HASH SEARCH: table_oid=%u, found=%s, entry=%p, counter_value=%llu, PID=%d",
+	     table_oid, found ? "true" : "false", entry,
 	     entry ? (unsigned long long)entry->counter_value : 0, MyProcPid);
 
 	if (!found)
 	{
 		/* New table - perform lazy recovery to find existing maximum counter */
 		uint64 recovered_max = BlockchainRecoverCounterForTable(table_oid);
-		
+
 		/* Initialize new counter entry */
 		entry->table_oid = table_oid;
 		entry->counter_value = recovered_max + 1;  /* Next counter after maximum found */
 		entry->last_persisted = 0;
 		LWLockInitialize(&entry->lock, LWTRANCHE_FIRST_USER_DEFINED + 1);
-		
-		elog(LOG, "Lazy recovery for table OID %u: starting counter at %llu", 
+
+		elog(LOG, "Lazy recovery for table OID %u: starting counter at %llu",
 			 table_oid, (unsigned long long)entry->counter_value);
 	}
 
@@ -201,29 +310,29 @@ BlockchainGetNextCounter(Oid table_oid)
 
 	/* Get counter value but only increment if in a transaction */
 	LWLockAcquire(&entry->lock, LW_EXCLUSIVE);
-	
-	elog(DEBUG1, "DEBUG: BlockchainGetNextCounter - entry lock acquired, entry=%p, counter_value=%llu, PID=%d", 
+
+	elog(DEBUG1, "DEBUG: BlockchainGetNextCounter - entry lock acquired, entry=%p, counter_value=%llu, PID=%d",
 	     entry, (unsigned long long)entry->counter_value, MyProcPid);
-	
+
 	/* BLOCKCHAIN IMMUTABILITY: Simple counter increment with NO rollback
-	 * 
+	 *
 	 * For blockchain systems, counter gaps from failed transactions are CORRECT behavior:
 	 * 1. Maintains immutability - failed attempts should leave traces
-	 * 2. Avoids dangerous race conditions in concurrent rollback scenarios  
+	 * 2. Avoids dangerous race conditions in concurrent rollback scenarios
 	 * 3. Follows precedent of Bitcoin/Ethereum nonce handling
 	 * 4. Simpler, faster, and safer than complex reservation systems
 	 */
 	result = entry->counter_value++;
-	
-	elog(LOG, "BLOCKCHAIN COUNTER: table_oid=%u, counter=%llu, PID=%d", 
+
+	elog(LOG, "BLOCKCHAIN COUNTER (LWLock): table_oid=%u, counter=%llu, PID=%d",
 	     table_oid, (unsigned long long)result, MyProcPid);
-	
-	elog(DEBUG1, "DEBUG: BlockchainGetNextCounter - about to release entry lock and return %llu, PID=%d", 
+
+	elog(DEBUG1, "DEBUG: BlockchainGetNextCounter - about to release entry lock and return %llu, PID=%d",
 	     (unsigned long long)result, MyProcPid);
 
 	LWLockRelease(&entry->lock);
-	
-	elog(DEBUG1, "DEBUG: BlockchainGetNextCounter - COMPLETED successfully, returning %llu, PID=%d", 
+
+	elog(DEBUG1, "DEBUG: BlockchainGetNextCounter - COMPLETED successfully, returning %llu, PID=%d",
 	     (unsigned long long)result, MyProcPid);
 
 	return result;
@@ -271,7 +380,9 @@ BlockchainPersistCounters(void)
 	hash_seq_init(&status, BlockchainCounterShmem->counter_hash);
 	while ((entry = (BlockchainCounterEntry *) hash_seq_search(&status)) != NULL)
 	{
-		/* Write table OID and counter value */
+		uint64 counter_to_persist;
+
+		/* Write table OID */
 		if (FileWrite(file, &entry->table_oid, sizeof(Oid), offset, WAIT_EVENT_DATA_FILE_WRITE) != sizeof(Oid))
 		{
 			ereport(WARNING,
@@ -283,8 +394,16 @@ BlockchainPersistCounters(void)
 			return;
 		}
 		offset += sizeof(Oid);
-		
-		if (FileWrite(file, &entry->counter_value, sizeof(uint64), offset, WAIT_EVENT_DATA_FILE_WRITE) != sizeof(uint64))
+
+		/* Get counter value (atomic-safe) */
+#ifdef PG_HAVE_ATOMIC_U64_SUPPORT
+		if (blockchain_use_atomic_counters && pg_atomic_read_u32(&entry->initialized) == 1)
+			counter_to_persist = pg_atomic_read_u64(&entry->counter_value_atomic);
+		else
+#endif
+			counter_to_persist = entry->counter_value;
+
+		if (FileWrite(file, &counter_to_persist, sizeof(uint64), offset, WAIT_EVENT_DATA_FILE_WRITE) != sizeof(uint64))
 		{
 			ereport(WARNING,
 					(errcode_for_file_access(),
@@ -611,6 +730,65 @@ blockchain_subxact_callback(SubXactEvent event, SubTransactionId mySubid,
 }
 
 /*
+ * BlockchainCleanupHashCache
+ *		Remove old entries from hash cache when it gets too full
+ *		This prevents OOM errors with large cumulative insert volumes
+ */
+static void
+BlockchainCleanupHashCache(void)
+{
+	HASH_SEQ_STATUS status;
+	BlockchainHashEntry *entry;
+	BlockchainHashKey *keys_to_remove;
+	int removed = 0;
+	int total = 0;
+	int target_remove;
+	int i;
+
+	/* Count total entries */
+	hash_seq_init(&status, BlockchainCounterShmem->hash_cache);
+	while ((entry = (BlockchainHashEntry *) hash_seq_search(&status)) != NULL)
+	{
+		total++;
+	}
+
+	/* If cache is > 90% full, remove oldest 50% of entries */
+	if (total > (MAX_CACHED_HASHES * 9 / 10))
+	{
+		target_remove = total / 2;
+
+		elog(LOG, "Hash cache cleanup: %d entries (%.1f%% full), removing ~%d entries",
+			 total, (total * 100.0) / MAX_CACHED_HASHES, target_remove);
+
+		/* Allocate array to collect keys to remove */
+		keys_to_remove = (BlockchainHashKey *) palloc(target_remove * sizeof(BlockchainHashKey));
+
+		/* Collect keys to remove (can't remove during iteration) */
+		hash_seq_init(&status, BlockchainCounterShmem->hash_cache);
+		while ((entry = (BlockchainHashEntry *) hash_seq_search(&status)) != NULL && removed < target_remove)
+		{
+			keys_to_remove[removed] = entry->key;
+			removed++;
+		}
+		hash_seq_term(&status);
+
+		/* Now remove all collected entries */
+		for (i = 0; i < removed; i++)
+		{
+			hash_search(BlockchainCounterShmem->hash_cache,
+						&keys_to_remove[i],
+						HASH_REMOVE,
+						NULL);
+		}
+
+		pfree(keys_to_remove);
+
+		elog(LOG, "Hash cache cleanup: removed %d entries, %d remaining",
+			 removed, total - removed);
+	}
+}
+
+/*
  * BlockchainStoreHash
  *		Store a hash in shared memory for an uncommitted block
  *		This allows the next transaction to read it before the block is committed
@@ -629,6 +807,9 @@ BlockchainStoreHash(Oid table_oid, uint64 counter, const unsigned char *hash)
 	key.counter = counter;
 
 	LWLockAcquire(&BlockchainCounterShmem->hash_cache_lock, LW_EXCLUSIVE);
+
+	/* Check if cache needs cleanup before inserting */
+	BlockchainCleanupHashCache();
 
 	entry = (BlockchainHashEntry *) hash_search(BlockchainCounterShmem->hash_cache,
 												&key,

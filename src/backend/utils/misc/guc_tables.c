@@ -98,6 +98,7 @@
 #include "utils/memutils.h"
 #include "utils/pg_locale.h"
 #include "utils/plancache.h"
+#include "blockchain/blockchain_counter.h"
 #include "utils/ps_status.h"
 #include "utils/rls.h"
 #include "utils/xml.h"
@@ -2143,6 +2144,18 @@ struct config_bool ConfigureNamesBool[] =
 		NULL, NULL, NULL
 	},
 
+	/* Blockchain table options */
+	{
+		{"blockchain.use_atomic_counters", PGC_POSTMASTER, CUSTOM_OPTIONS,
+			gettext_noop("Use lock-free atomic counters for blockchain tables."),
+			gettext_noop("When enabled, blockchain tables use pg_atomic operations for counter allocation, "
+						 "providing significantly better performance under high concurrency. Requires restart."),
+		},
+		&blockchain_use_atomic_counters,
+		true,
+		NULL, NULL, NULL
+	},
+
 	/* End-of-list marker */
 	{
 		{NULL, 0, 0, NULL, NULL}, NULL, false, NULL, NULL, NULL
@@ -3857,6 +3870,57 @@ struct config_int ConfigureNamesInt[] =
 		},
 		&scram_sha_256_iterations,
 		SCRAM_SHA_256_DEFAULT_ITERATIONS, 1, INT_MAX,
+		NULL, NULL, NULL
+	},
+
+	/* Blockchain table options */
+	{
+		{"blockchain.hash_cache_partitions", PGC_POSTMASTER, CUSTOM_OPTIONS,
+			gettext_noop("Number of partitions for blockchain hash cache."),
+			gettext_noop("Higher values reduce lock contention but increase memory usage. Requires restart."),
+		},
+		&blockchain_hash_cache_partitions,
+		64, 1, 256,
+		NULL, NULL, NULL
+	},
+
+	{
+		{"blockchain.retry_initial_us", PGC_USERSET, CUSTOM_OPTIONS,
+			gettext_noop("Initial retry delay in microseconds for blockchain hash lookups."),
+			gettext_noop("Starting delay for exponential backoff when waiting for uncommitted hashes."),
+		},
+		&blockchain_retry_initial_us,
+		100, 10, 100000,
+		NULL, NULL, NULL
+	},
+
+	{
+		{"blockchain.retry_max_us", PGC_USERSET, CUSTOM_OPTIONS,
+			gettext_noop("Maximum retry delay in microseconds for blockchain hash lookups."),
+			gettext_noop("Cap for exponential backoff delay."),
+		},
+		&blockchain_retry_max_us,
+		10000, 100, 1000000,
+		NULL, NULL, NULL
+	},
+
+	{
+		{"blockchain.retry_max_total_ms", PGC_USERSET, CUSTOM_OPTIONS,
+			gettext_noop("Total retry timeout in milliseconds for blockchain hash lookups."),
+			gettext_noop("Maximum time to wait for previous hash before timing out."),
+		},
+		&blockchain_retry_max_total_ms,
+		1000, 100, 60000,
+		NULL, NULL, NULL
+	},
+
+	{
+		{"blockchain.batch_max_size", PGC_USERSET, CUSTOM_OPTIONS,
+			gettext_noop("Maximum batch size for blockchain_batch_insert function."),
+			gettext_noop("Limits the number of rows that can be inserted in a single batch operation."),
+		},
+		&blockchain_batch_max_size,
+		256, 1, 10000,
 		NULL, NULL, NULL
 	},
 

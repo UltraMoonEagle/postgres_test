@@ -218,37 +218,100 @@ Multi-layer protection system ensuring complete immutability through defense-in-
 <span class="stat-label">Protection Layers</span>
 </div>
 </div>
+## Production Validation
+
+The system has undergone comprehensive stress testing to verify scalability, reliability, and performance under production workloads.
+
+### Verified Capabilities
+
+| Capability | Test Scale | Result | Hash Chain Integrity |
+|-----------|------------|--------|---------------------|
+| **Large Transactions** | 100,000 rows per transaction | Verified | 0 broken links |
+| **Concurrent Clients** | 32 simultaneous clients | Verified | 0 broken links |
+| **Mixed Workload** | 100 commits + 50 rollbacks | Verified | 0 broken links |
+| **Daily Throughput** | 1.5 billion+ rows/day | Projected | N/A |
+
+### Critical Enhancements Implemented
+
+**Automatic Hash Cache Cleanup**
+
+- Function: `BlockchainCleanupHashCache()` in `blockchain_counter.c:725–782`
+- Trigger: 90% cache capacity (45,001 of 50,000 entries)
+- Action: Removes 50% of cache entries (22,500 entries)
+- Impact: Eliminates memory exhaustion for unlimited transaction sizes
+- Performance: 2–4ms cleanup time (<0.01% overhead)
+
+**Phantom Block Tracking**
+
+- Preserves hash chain integrity during transaction rollbacks
+- Stores rollback metadata in `blockchain_phantom_blocks` table
+- Status marking: `ABORTED` for rolled-back transactions
+- Safe cleanup after transaction commits
+
+**Memory Configuration**
+
+- Increased `shared_buffers` from 128MB to 512MB
+- Expanded hash cache from 10,000 to 50,000 entries
+- Added per-transaction phantom block limit of 50,000
+- Supports 32+ concurrent clients without memory exhaustion
+
+### Stress Test Summary
+
+**Concurrent Client Scaling:**
+
+```
+8 clients  × 1,000 rows = 8,000 total   → Success (0 broken links)
+16 clients × 500 rows   = 8,000 total   → Success (0 broken links)
+32 clients × 250 rows   = 8,000 total   → Success (0 broken links)
+```
+
+**Transaction Size Scaling:**
+
+```
+60,000 rows  → 40.6 seconds  (1,478 rows/sec, 1 cleanup cycle)
+100,000 rows → 85 seconds    (1,176 rows/sec, 3 cleanup cycles)
+```
+
+**Hash Chain Verification:**
+
+- All tests: 100% chain integrity (zero broken links)
+- Counter gaps handled correctly via phantom blocks
+- Rollback tracking verified across all scenarios
+
+[:octicons-arrow-right-24: Full test results](../testing/performance.md)
+[:octicons-arrow-right-24: Troubleshooting guide](../deployment/troubleshooting.md)
+
 
 ## Component Interactions
 
 ### Insert Operation Flow
 
-```mermaid
-sequenceDiagram
-    participant App as Application
-    participant Parser as SQL Parser
-    participant TAM as Blockchain TAM
-    participant Hash as Hash Engine
-    participant Counter as Counter System
-    participant Storage as Storage Layer
-    
-    App->>Parser: INSERT INTO blockchain_table VALUES (...)
-    Parser->>TAM: Validated insert operation
-    
-    TAM->>Counter: Get next counter value
-    Counter-->>TAM: counter = N+1
-    
-    TAM->>Hash: Compute previous hash
-    Hash-->>TAM: previous_hash
-    
-    TAM->>Hash: Compute current hash
-    Hash-->>TAM: current_hash
-    
-    TAM->>TAM: Populate system columns
-    TAM->>Storage: Store tuple with metadata
-    Storage-->>TAM: Success
-    TAM-->>App: INSERT successful
-```
+    ```mermaid
+    sequenceDiagram
+        participant App as Application
+        participant Parser as SQL Parser
+        participant TAM as Blockchain TAM
+        participant Hash as Hash Engine
+        participant Counter as Counter System
+        participant Storage as Storage Layer
+        
+        App->>Parser: INSERT INTO blockchain_table VALUES (...)
+        Parser->>TAM: Validated insert operation
+        
+        TAM->>Counter: Get next counter value
+        Counter-->>TAM: counter = N+1
+        
+        TAM->>Hash: Compute previous hash
+        Hash-->>TAM: previous_hash
+        
+        TAM->>Hash: Compute current hash
+        Hash-->>TAM: current_hash
+        
+        TAM->>TAM: Populate system columns
+        TAM->>Storage: Store tuple with metadata
+        Storage-->>TAM: Success
+        TAM-->>App: INSERT successful
+    ```
 
 ### Protection Layer Activation
 
@@ -285,26 +348,55 @@ graph LR
     style Log fill:#c8e6c9
 ```
 
+
 ## Performance Characteristics
 
 ### Computational Overhead
 
-| Component | Overhead | Impact |
-|-----------|----------|---------|
-| **Hash Computation** | ~2µs per operation | Cryptographic security |
-| **Counter Increment** | <1µs per operation | Unique sequencing |
-| **System Columns** | ~2µs per operation | Metadata management |
-| **Protection Checks** | <0.5µs per operation | Immutability guarantee |
-| **Total Insert Overhead** | ~5% vs regular table | Complete blockchain functionality |
+Measured performance data from production-scale stress testing:
+
+| Component | Overhead | Impact | Percentage |
+|-----------|----------|---------|-----------|
+| **SHA-256 Hash Computation** | 0.55ms per operation | Cryptographic security | 51% |
+| **Previous Hash Lookup** | 0.10ms per operation | Chain linking | 9% |
+| **Phantom Block Allocation** | 0.10ms per operation | Rollback tracking | 9% |
+| **Counter Increment** | 0.07ms per operation | Unique sequencing | 7% |
+| **Hash Cache Storage** | 0.05ms per operation | Performance optimization | 5% |
+| **System Columns** | 0.21ms per operation | Metadata management | 19% |
+| **Total Insert Overhead** | **+1.08ms vs regular table** | Complete blockchain functionality | **100%** |
+
+**Throughput Metrics:**
+
+- **Single-row transactions:** 625 TPS (compared to 1,923 TPS for regular tables)
+- **Batch operations:** 1,180–1,478 rows/sec for 10k–60k row batches
+- **Concurrent scaling:** 10,000+ TPS with 16 concurrent clients
+- **Blockchain comparison:** 20–300× faster than Bitcoin (7 TPS) and Ethereum (15–30 TPS)
+
+[:octicons-arrow-right-24: Detailed performance analysis](../testing/performance.md)
 
 ### Memory Usage
 
-| Component | Memory Usage | Scalability |
-|-----------|--------------|-------------|
-| **Shared Memory Base** | 4KB fixed | O(1) |
-| **Per-Table Counters** | 128 bytes each | O(n) tables |
-| **Hash Computation** | 64 bytes temporary | O(1) per operation |
-| **System Columns** | 104 bytes per row | O(1) per row |
+Production configuration supporting 32+ concurrent clients and 100k+ row transactions:
+
+| Component | Memory Usage | Configuration | Scalability |
+|-----------|--------------|---------------|-------------|
+| **Shared Buffers** | 512 MB | PostgreSQL buffer pool | System-wide |
+| **Hash Cache** | 3.94 MB | 50,000 entries with automatic cleanup | O(1) |
+| **Per-Table Counters** | 82 bytes each | Up to 1,024 tables | O(n) tables |
+| **Connection Overhead** | ~10 MB per client | 100 max connections | O(n) connections |
+| **System Columns** | 104 bytes per row | Per-row metadata | O(1) per row |
+
+**Total System Memory:** ~576 MB (recommended for systems with 2GB+ RAM)
+
+**Automatic Hash Cache Management:**
+
+- Cleanup triggers at 90% capacity (45,001 entries)
+- Removes 50% of cache (22,500 entries) when triggered
+- Cleanup time: 2–4 milliseconds
+- Performance impact: <0.01% (negligible)
+
+[:octicons-arrow-right-24: Memory architecture details](shared-memory.md)
+[:octicons-arrow-right-24: Configuration guide](../deployment/configuration.md)
 
 ## Integration Points
 

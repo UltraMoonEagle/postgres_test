@@ -68,8 +68,10 @@
 #include "blockchain/blockchainam.h"
 #include "blockchain/blockchain_hash.h"
 #include "blockchain/blockchain_counter.h"
+#include "blockchain/blockchain_phantom_optimized.h"
 #include "commands/vacuum.h"
 #include "access/multixact.h"
+#include "portability/instr_time.h"
 
 
 PG_FUNCTION_INFO_V1(blockchain_tableam_handler);
@@ -3037,6 +3039,15 @@ blockchainam_tuple_insert(Relation relation, TupleTableSlot *slot,
     {
         BlockchainStoreHash(RelationGetRelid(relation), counter,
                            (const unsigned char *)VARDATA(curr_hash));
+
+        /* PHANTOM BLOCK FIX: Record phantom block metadata in backend memory (ZERO I/O!)
+         * Only persisted to disk if transaction aborts. This gives us:
+         * - 0% I/O overhead for successful transactions (99%+ of cases)
+         * - Full chain verification for rolled-back transactions */
+        blockchain_record_phantom_block(RelationGetRelid(relation), counter,
+                                       prev_hash ? (const unsigned char *)VARDATA(prev_hash)
+                                                 : (const unsigned char *)"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0",
+                                       (const unsigned char *)VARDATA(curr_hash));
     }
 
     // Initialize blockchain columns
@@ -3277,14 +3288,25 @@ get_previous_hash(Relation rel, uint64 current_counter)
         return prev_hash;
     }
 
-    /* Retry loop to handle concurrent transactions
-     * We'll try up to 500 times with 2ms sleep between attempts (max 1 second wait) */
-    int max_retries = 500;
-    int retry_delay_ms = 2;
+    /* PHASE 1: Adaptive retry loop with exponential backoff and jitter
+     * Uses GUC parameters for configuration:
+     * - blockchain.retry_initial_us: Starting delay (default 100μs)
+     * - blockchain.retry_max_us: Maximum delay cap (default 10ms)
+     * - blockchain.retry_max_total_ms: Total timeout (default 1s)
+     */
     unsigned char cached_hash[32];
+    int64 current_delay_us = blockchain_retry_initial_us;
+    int64 total_elapsed_us = 0;
+    int64 max_total_us = (int64)blockchain_retry_max_total_ms * 1000;
+    int retry_count = 0;
+    instr_time start_time, current_time;
 
-    for (int retry = 0; retry < max_retries; retry++)
+    INSTR_TIME_SET_CURRENT(start_time);
+
+    while (total_elapsed_us < max_total_us)
     {
+        retry_count++;
+
         /* First, try shared memory cache (fast path) */
         if (BlockchainGetCachedHash(rel->rd_id, prev_counter, cached_hash))
         {
@@ -3294,8 +3316,8 @@ get_previous_hash(Relation rel, uint64 current_counter)
             memcpy(VARDATA(prev_hash), cached_hash, 32);
             MemoryContextSwitchTo(oldcontext);
 
-            elog(LOG, "get_previous_hash: Found hash in cache for counter %llu (retry %d)",
-                 (unsigned long long)prev_counter, retry);
+            elog(LOG, "get_previous_hash: Found hash in cache for counter %llu (attempt %d, elapsed %lld μs)",
+                 (unsigned long long)prev_counter, retry_count, (long long)total_elapsed_us);
             return prev_hash;
         }
 
@@ -3325,8 +3347,35 @@ get_previous_hash(Relation rel, uint64 current_counter)
                     prev_hash = (bytea *) datumCopy(prev_hash_datum, false, -1);
                     MemoryContextSwitchTo(oldcontext);
 
-                    elog(LOG, "get_previous_hash: Found hash in DB for counter %llu (retry %d)",
-                         (unsigned long long)prev_counter, retry);
+                    elog(LOG, "get_previous_hash: Found hash in DB for counter %llu (attempt %d, elapsed %lld μs)",
+                         (unsigned long long)prev_counter, retry_count, (long long)total_elapsed_us);
+                    SPI_finish();
+                    return prev_hash;
+                }
+            }
+
+            /* PHANTOM BLOCK FIX: If not found in main table, check phantom_blocks
+             * This handles rolled-back transactions whose hashes are still needed for chain verification */
+            snprintf(query, sizeof(query),
+                    "SELECT computed_hash FROM blockchain_phantom_blocks "
+                    "WHERE table_oid = %u AND counter = %llu",
+                    RelationGetRelid(rel), (unsigned long long)prev_counter);
+
+            spi_result = SPI_execute(query, true, 1);
+
+            if (spi_result == SPI_OK_SELECT && SPI_processed > 0)
+            {
+                tuptable = SPI_tuptable;
+                prev_hash_datum = SPI_getbinval(tuptable->vals[0], tuptable->tupdesc, 1, &isnull);
+
+                if (!isnull)
+                {
+                    oldcontext = MemoryContextSwitchTo(CurTransactionContext);
+                    prev_hash = (bytea *) datumCopy(prev_hash_datum, false, -1);
+                    MemoryContextSwitchTo(oldcontext);
+
+                    elog(LOG, "get_previous_hash: Found hash in phantom_blocks for counter %llu (rolled-back transaction)",
+                         (unsigned long long)prev_counter);
                     SPI_finish();
                     return prev_hash;
                 }
@@ -3341,17 +3390,42 @@ get_previous_hash(Relation rel, uint64 current_counter)
         }
         PG_END_TRY();
 
-        /* Not found yet - sleep and retry (unless this is the last attempt) */
-        if (retry < max_retries - 1)
+        /* Not found - apply exponential backoff with jitter */
+        if (total_elapsed_us < max_total_us)
         {
-            pg_usleep(retry_delay_ms * 1000L);  /* Convert ms to microseconds */
+            int64 jitter_range = current_delay_us * 2 / 5;  /* ±20% jitter */
+            int64 jitter = (random() % (jitter_range * 2 + 1)) - jitter_range;
+            int64 delay_with_jitter = current_delay_us + jitter;
+
+            /* Ensure delay is positive and within bounds */
+            if (delay_with_jitter < 0)
+                delay_with_jitter = current_delay_us;
+            if (delay_with_jitter > blockchain_retry_max_us)
+                delay_with_jitter = blockchain_retry_max_us;
+
+            elog(DEBUG1, "get_previous_hash: Retry %d, delaying %lld μs (base: %lld, jitter: %lld)",
+                 retry_count, (long long)delay_with_jitter, (long long)current_delay_us, (long long)jitter);
+
+            pg_usleep(delay_with_jitter);
+
+            /* Update elapsed time */
+            INSTR_TIME_SET_CURRENT(current_time);
+            INSTR_TIME_SUBTRACT(current_time, start_time);
+            total_elapsed_us = INSTR_TIME_GET_MICROSEC(current_time);
+
+            /* Exponential backoff: double the delay for next iteration */
+            current_delay_us *= 2;
+            if (current_delay_us > blockchain_retry_max_us)
+                current_delay_us = blockchain_retry_max_us;
         }
     }
 
-    /* After all retries, still not found - this is a serious error */
-    elog(ERROR, "get_previous_hash: Failed to find hash for counter %llu after %d retries. "
-         "Previous transaction (counter %llu) may have failed or is deadlocked.",
-         (unsigned long long)current_counter, max_retries, (unsigned long long)prev_counter);
+    /* After timeout, still not found - this is a serious error */
+    elog(ERROR, "get_previous_hash: Failed to find hash for counter %llu after %d attempts (%lld μs total). "
+         "Previous transaction (counter %llu) may have failed or is deadlocked. "
+         "Consider increasing blockchain.retry_max_total_ms.",
+         (unsigned long long)current_counter, retry_count, (long long)total_elapsed_us,
+         (unsigned long long)prev_counter);
 
     /* Unreachable - elog(ERROR) doesn't return */
     return NULL;

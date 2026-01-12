@@ -27,6 +27,7 @@
 #include "access/xact.h"
 #include "access/xlog.h"
 #include "access/xloginsert.h"
+#include "blockchain/blockchain_phantom_optimized.h"
 #include "catalog/namespace.h"
 #include "catalog/pg_authid.h"
 #include "catalog/pg_collation.h"
@@ -1210,6 +1211,29 @@ InitPostgres(const char *in_dbname, Oid dboid,
 
 	/* set default namespace search path */
 	InitializeSearchPath();
+
+	/*
+	 * Recover phantom blocks from append-only log file on first connection.
+	 * This must run after catalogs are initialized and within a transaction.
+	 * Runs once on first backend connection to recover crash-safe phantom blocks.
+	 * Creates blockchain_phantom_blocks table automatically if it doesn't exist.
+	 */
+	if (!bootstrap)
+	{
+		/* Try to recover phantom blocks (function handles one-time execution via shared memory) */
+		PG_TRY();
+		{
+			blockchain_recover_phantom_blocks();
+		}
+		PG_CATCH();
+		{
+			/* Recovery failed - log error and continue (function will handle retry logic) */
+			EmitErrorReport();
+			FlushErrorState();
+			elog(WARNING, "blockchain_recover_phantom_blocks: Recovery failed, will retry on next connection");
+		}
+		PG_END_TRY();
+	}
 
 	/* initialize client encoding */
 	InitializeClientEncoding();
